@@ -3,7 +3,7 @@ use axum::{
     extract::{Form, State},
     http::StatusCode,
 };
-use chrono::{DateTime, FixedOffset, Local};
+use chrono::{DateTime, Duration, FixedOffset, Local, Utc};
 use surrealdb::RecordId;
 
 use crate::{
@@ -11,7 +11,10 @@ use crate::{
     errors::{Error, Result},
     models::user::{AuthProvider, User, UserReqForSignUp, UserReqWithPassword, UserWithPassword},
     state::AppState,
-    utils::pwd::{hash, validate},
+    utils::{
+        jwt::{Claims, encode_jwt},
+        pwd::{hash, validate},
+    },
 };
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -84,4 +87,71 @@ pub async fn sign_up(
     } else {
         return Err(Error::Unknown);
     }
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct SignInFormRequest {
+    pub email: String,
+    pub password: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SignInFormResponse {
+    pub access_token: String,
+    refresh_token: String,
+    pub token_type: String,
+}
+
+pub async fn sign_in(
+    State(state): State<AppState>,
+    Form(input): Form<SignInFormRequest>,
+) -> Result<(StatusCode, Json<SignInFormResponse>)> {
+    // TODO: validate email
+    let get_user: Vec<UserWithPassword> = state
+        .sdb
+        .query(
+            "SELECT * FROM type::table($table) WHERE user_id.email = $email AND user_id.auth_provider = $provider",
+        )
+        .bind(("table", AUTH_PASSWORD_TABLE))
+        .bind(("email", input.email))
+        .bind(("provider", AuthProvider::Classic))
+        .await?
+        .take(0)?;
+
+    if get_user.is_empty() {
+        return Err(Error::InvalidLoginDetails);
+    }
+    let get_user = get_user.get(0);
+    if let Some(user) = get_user {
+        let password_hash = &user.password_hash;
+        let validate = validate(input.password.clone().as_bytes(), password_hash)?;
+        let user_id = user.user_id.to_string();
+        match validate {
+            true => {
+                let exp = (Utc::now() + Duration::minutes(3)).timestamp() as usize; // ? TODO: Change this to days instead of minutes
+                let iat = Utc::now().timestamp() as usize;
+                let claims = Claims {
+                    id: user_id,
+                    exp,
+                    iat,
+                    iss: "Mangoe".to_string(),
+                };
+                let access_token = encode_jwt(&claims)?;
+                let refresh_token = "no refresh yet".to_string(); // ?TODO: add refresh token later
+
+                return Ok((
+                    StatusCode::OK,
+                    Json(SignInFormResponse {
+                        access_token,
+                        refresh_token,
+                        token_type: "Bearer".to_string(),
+                    }),
+                ));
+            }
+            false => {
+                return Err(Error::InvalidLoginDetails);
+            }
+        };
+    }
+    Err(Error::InvalidLoginDetails)
 }

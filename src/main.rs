@@ -1,8 +1,35 @@
+use axum::{Router, extract::State, routing::get};
+use tracing::info;
+use tracing_subscriber::FmtSubscriber;
+
+use crate::{
+    errors::Result,
+    routes::{auth_route::auth_router, root_route},
+    state::AppState,
+};
+
 pub mod consts;
 pub mod errors;
 pub mod models;
+pub mod routes;
+pub mod state;
 pub mod utils;
 
-fn main() {
-    println!("Hello, world!");
+#[tokio::main]
+async fn main() -> Result<()> {
+    tracing::subscriber::set_global_default(FmtSubscriber::default()).unwrap();
+    let state = AppState::init().await?;
+    let app = Router::new()
+        .route("/", get(root_route))
+        .nest("/auth", auth_router(state.clone()))
+        .with_state(state);
+    const PORT: &str = "3587";
+
+    info!("Starting server");
+
+    let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", PORT)).await?;
+    info!("Serving auth at http://{}", listener.local_addr()?);
+    axum::serve(listener, app).await?;
+
+    Ok(())
 }

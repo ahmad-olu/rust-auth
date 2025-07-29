@@ -17,6 +17,13 @@ pub enum Error {
 
     #[error("SurrealDb Error: {0}")]
     SurrealError(#[from] SError),
+
+    #[error("Io Error: {0}")]
+    IoError(#[from] std::io::Error),
+
+    #[error("Axum Error: {0}")]
+    AxumError(#[from] axum::Error),
+
     #[error("Invalid login detail")]
     InvalidLoginDetails,
 
@@ -36,6 +43,8 @@ impl IntoResponse for Error {
             Error::Argon2Error(_error) => res,
             Error::JwTError(_error) => res,
             Error::SurrealError(_error) => res,
+            Error::IoError(_error) => res,
+            Error::AxumError(_error) => res,
             Error::InvalidLoginDetails => {
                 (StatusCode::BAD_REQUEST, "Invalid Login Details").into_response()
             }

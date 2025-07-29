@@ -45,16 +45,23 @@ pub enum UserStatus {
     InActive,
 }
 
+#[derive(Debug, serde::Deserialize)]
 pub struct UserWithPassword {
     pub id: RecordId,
     pub user_id: RecordId,
     pub password_hash: String, // ! & (len = 255)
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Debug, serde::Serialize)]
+pub struct UserReqWithPassword {
+    pub user_id: RecordId,
+    pub password_hash: String, // ! & (len = 255)
+}
+
+#[derive(Deserialize, Debug, Clone)]
 pub struct User {
     pub id: RecordId,
-    pub user_name: Option<String>,
+    pub username: Option<String>,
     pub first_name: Option<String>, // ! & (len = 100)
     pub last_name: Option<String>,  // ! & (len = 100)
     pub email: String,              // ! unique & (len = 255)
@@ -75,6 +82,15 @@ pub struct User {
     pub metadata: Option<serde_json::Value>,
 }
 
+#[derive(Serialize, Debug, Clone)]
+pub struct UserReqForSignUp {
+    pub username: String,
+    pub email: String, // ! unique & (len = 255)
+    pub auth_provider: AuthProvider,
+    pub created_at: String,
+    pub email_verified: bool,
+}
+
 // ! break the user table into smaller table
 
 pub struct UserCreate {
@@ -84,7 +100,7 @@ pub struct UserCreate {
 impl UserCreate {
     pub fn username(&mut self, val: &str) -> &UserCreate {
         if val.len() != 0 {
-            self.user.insert("user_name".into(), json!(val));
+            self.user.insert("username".into(), json!(val));
         }
         self
     }

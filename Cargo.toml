@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 argon2 = { version = "0.5.3", features = ["std"] }
-axum = { version = "0.8.4", features = ["multipart", "macros"] }
+axum = { version = "0.8.4", features = ["multipart", "macros", "form"] }
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
 derive_more = { version = "2.0.1", features = ["display", "from"] }
 dotenvy = "0.15.7"

@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.98"
 argon2 = { version = "0.5.3", features = ["std"] }
 axum = { version = "0.8.4", features = ["multipart", "macros"] }
 axum-extra = { version = "0.10.1", features = ["typed-header"] }

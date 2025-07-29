@@ -5,22 +5,28 @@ use axum::{
 };
 use chrono::{DateTime, Duration, FixedOffset, Local, Utc};
 use surrealdb::RecordId;
+use validator::Validate;
 
 use crate::{
     consts::auth_const::{AUTH_PASSWORD_TABLE, USER_TABLE},
     errors::{Error, Result},
-    models::user::{AuthProvider, User, UserReqForSignUp, UserReqWithPassword, UserWithPassword},
+    models::user::{
+        AuthProvider, User, UserReqForSignUp, UserReqWithPassword, UserStatus, UserWithPassword,
+    },
     state::AppState,
     utils::{
         jwt::{Claims, encode_jwt},
         pwd::{hash, validate},
+        validated_form::ValidatedForm,
     },
 };
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, Validate)]
 pub struct SignUpFormRequest {
+    #[validate(email)]
     pub email: String,
     pub username: String,
+    #[validate(length(min = 8, max = 16))]
     pub password: String,
 }
 
@@ -31,9 +37,9 @@ pub struct SignUpFormResponse {
 
 pub async fn sign_up(
     State(state): State<AppState>,
-    Form(input): Form<SignUpFormRequest>,
+    // Form(input): Form<SignUpFormRequest>,
+    ValidatedForm(input): ValidatedForm<SignUpFormRequest>,
 ) -> Result<(StatusCode, Json<SignUpFormResponse>)> {
-    // TODO: validate password, email and username
     let check_user: Vec<User> = state
         .sdb
         .query("SELECT * FROM type::table($table) WHERE email = $email;")
@@ -56,6 +62,7 @@ pub async fn sign_up(
         auth_provider: AuthProvider::Classic,
         created_at,
         email_verified: false,
+        status: UserStatus::Active,
     };
     let create_user: Option<User> = state.sdb.create(USER_TABLE).content(user_data).await?;
     if let Some(user) = create_user {
@@ -63,7 +70,7 @@ pub async fn sign_up(
             user_id: user.id,
             password_hash,
         };
-        let _: Option<User> = state
+        let _: Option<UserWithPassword> = state
             .sdb
             .create(AUTH_PASSWORD_TABLE)
             .content(auth_password)
@@ -89,9 +96,11 @@ pub async fn sign_up(
     }
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, Validate)]
 pub struct SignInFormRequest {
+    #[validate(email)]
     pub email: String,
+    #[validate(length(min = 8, max = 16))]
     pub password: String,
 }
 
@@ -104,9 +113,8 @@ pub struct SignInFormResponse {
 
 pub async fn sign_in(
     State(state): State<AppState>,
-    Form(input): Form<SignInFormRequest>,
+    ValidatedForm(input): ValidatedForm<SignInFormRequest>,
 ) -> Result<(StatusCode, Json<SignInFormResponse>)> {
-    // TODO: validate email
     let get_user: Vec<UserWithPassword> = state
         .sdb
         .query(

@@ -4,6 +4,7 @@ use jsonwebtoken::errors::Error as JWError;
 use surrealdb::Error as SError;
 
 use thiserror::Error;
+use tracing::error;
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -24,6 +25,12 @@ pub enum Error {
     #[error("Axum Error: {0}")]
     AxumError(#[from] axum::Error),
 
+    #[error("Validator Error: {0}")]
+    ValidationError(#[from] validator::ValidationErrors),
+
+    #[error("Form Rejection Error: {0}")]
+    AxumFormRejection(#[from] axum::extract::rejection::FormRejection),
+
     #[error("Invalid login detail")]
     InvalidLoginDetails,
 
@@ -38,14 +45,39 @@ pub enum Error {
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
-        let res = (StatusCode::INTERNAL_SERVER_ERROR, "Internal Error").into_response();
+        // let res = || (StatusCode::INTERNAL_SERVER_ERROR, "Internal Error").into_response();
         match self {
-            Error::Argon2Error(_error) => res,
-            Error::JwTError(_error) => res,
-            Error::SurrealError(_error) => res,
-            Error::IoError(_error) => res,
-            Error::AxumError(_error) => res,
+            Error::Argon2Error(error) => {
+                error!("Argon 2 Error:{:#?}", error);
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal Error").into_response()
+            }
+            Error::JwTError(error) => {
+                error!("JWT Error:{:#?}", error);
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal Error").into_response()
+            }
+            Error::SurrealError(error) => {
+                error!("Surreal  Error:{:#?}", error);
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal Error").into_response()
+            }
+            Error::IoError(error) => {
+                error!("Io  Error:{:#?}", error);
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal Error").into_response()
+            }
+            Error::AxumError(error) => {
+                error!("Axum  Error:{:#?}", error);
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal Error").into_response()
+            }
+            Error::ValidationError(error) => {
+                let message = format!("Input validation error: [{}]", error).replace('\n', ", ");
+                error!("Validation Error:{:#?}", error);
+                (StatusCode::BAD_REQUEST, message).into_response()
+            }
+            Error::AxumFormRejection(error) => {
+                error!("Axum Form Rejection Error:{:#?}", error);
+                (StatusCode::BAD_REQUEST, error.to_string()).into_response()
+            }
             Error::InvalidLoginDetails => {
+                error!("Invalid login details");
                 (StatusCode::BAD_REQUEST, "Invalid Login Details").into_response()
             }
             Error::EmailExist(email) => (

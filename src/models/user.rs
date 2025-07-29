@@ -89,6 +89,7 @@ pub struct UserReqForSignUp {
     pub auth_provider: AuthProvider,
     pub created_at: String,
     pub email_verified: bool,
+    pub status: UserStatus,
 }
 
 // ! break the user table into smaller table

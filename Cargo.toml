@@ -1,0 +1,33 @@
+[package]
+name = "rust-auth"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.98"
+argon2 = { version = "0.5.3", features = ["std"] }
+axum = { version = "0.8.4", features = ["multipart", "macros"] }
+axum-extra = { version = "0.10.1", features = ["typed-header"] }
+derive_more = { version = "2.0.1", features = ["display", "from"] }
+dotenvy = "0.15.7"
+chrono = { version = "0.4.41", features = ["serde"] }
+redis = { version = "0.32.3", features = ["tokio-comp"] }
+jsonwebtoken = "9.3.1"
+regex = "1.11.1"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.141"
+socketioxide = "0.17.2"
+surrealdb = "2.3.7"
+tokio = { version = "1.47.0", features = ["full"] }
+tokio-util = "0.7.15"
+tower-http = { version = "0.6.6", features = [
+    "timeout",
+    "trace",
+    "limit",
+    "cors",
+    "auth",
+] }
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
+uuid = { version = "1.17.0", features = ["v4", "fast-rng"] }
+thiserror = "2.0.12"

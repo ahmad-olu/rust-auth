@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+
+  redis:
+    image: redis:6.2.6
+    ports:
+      - "8091:6379"
+    command: redis-server --requirepass "_XNBBg7Q_FNrEt9VRZhERnqDBuS_zHad"
+    environment:
+      - REDIS_REPLICATION_MODE=master
+  surrealdb:
+    image: surrealdb/surrealdb:latest
+    command: start --user root --pass secret  rocksdb:/mydata/mydatabase.db
+    ports:
+      - "8050:8000"
+    volumes:
+      - ./surreal_data:/mydata
+    # restart: unless-stopped
+    user: "1000:1000" # Docker handling volume ownership
+    pull_policy: always

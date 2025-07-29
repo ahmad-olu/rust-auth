@@ -1,0 +1,32 @@
+use surrealdb::RecordId;
+
+pub enum InvitationStatus {
+    Pending,
+    Accepted,
+    Declined,
+    Expired,
+    Cancelled,
+}
+
+pub struct Invitation {
+    pub id: RecordId,
+    pub team_id: RecordId,
+    pub email: String, // ! & (len = 255)
+    pub role: String,  // ! (default member) & (len = 50)
+
+    // ? Invitation details
+    pub token: String, // ! unique & (len = 255)
+    pub invite_by: RecordId,
+    pub message: Option<String>,
+
+    // ? Status & Timing
+    pub status: InvitationStatus,
+    pub expires_at: String, // ! (now + 3 days)
+    pub accepted_at: String,
+    pub accepted_by: RecordId, // ! userId
+
+    pub metadata: Option<serde_json::Value>,
+
+    pub created_at: String,
+    pub updated_at: Option<String>,
+}

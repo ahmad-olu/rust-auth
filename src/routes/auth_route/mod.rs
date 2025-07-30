@@ -1,23 +1,41 @@
 use axum::{
     Router,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 
 use crate::{
-    routes::{
-        auth_route::user::{sign_in, sign_up},
-        root_route,
+    routes::auth_route::{
+        modify_user::{
+            confirm_email_change, delete_user, forgotten_password_token_validation,
+            request_email_change, request_forgot_password, resend_email_verification,
+            reset_password, verify_email,
+        },
+        user::{sign_in, sign_up},
     },
     state::AppState,
 };
 
+pub mod modify_user;
 pub mod user;
 
 pub fn auth_router(config: AppState) -> Router<AppState> {
     Router::new()
-        .route("/", get(root_route))
+        //  .route("/", get(root_route))
         .route("/signin", post(sign_in))
         .route("/signup", post(sign_up))
-        // .route("/refresh", post(refresh))
+        .route(
+            "/email/resend-verification",
+            post(resend_email_verification),
+        )
+        .route("/email/verify", get(verify_email))
+        .route("/email/change-request", post(request_email_change))
+        .route("/email/change-confirm", post(confirm_email_change))
+        .route("/password/reset-request", post(request_forgot_password))
+        .route(
+            "/password/validate-token",
+            post(forgotten_password_token_validation),
+        )
+        .route("/password/reset", post(reset_password))
+        .route("/delete", delete(delete_user))
         .with_state(config)
 }

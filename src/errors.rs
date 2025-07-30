@@ -31,6 +31,9 @@ pub enum Error {
     #[error("Form Rejection Error: {0}")]
     AxumFormRejection(#[from] axum::extract::rejection::FormRejection),
 
+    #[error("Form Rejection Error: {0}")]
+    AxumJsonRejection(#[from] axum::extract::rejection::JsonRejection),
+
     #[error("Invalid login detail")]
     InvalidLoginDetails,
 
@@ -74,6 +77,10 @@ impl IntoResponse for Error {
             }
             Error::AxumFormRejection(error) => {
                 error!("Axum Form Rejection Error:{:#?}", error);
+                (StatusCode::BAD_REQUEST, error.to_string()).into_response()
+            }
+            Error::AxumJsonRejection(error) => {
+                error!("Axum Json Rejection Error:{:#?}", error);
                 (StatusCode::BAD_REQUEST, error.to_string()).into_response()
             }
             Error::InvalidLoginDetails => {

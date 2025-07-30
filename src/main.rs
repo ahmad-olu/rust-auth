@@ -1,12 +1,8 @@
-use axum::{Router, extract::State, routing::get};
+use axum::Router;
 use tracing::info;
 use tracing_subscriber::FmtSubscriber;
 
-use crate::{
-    errors::Result,
-    routes::{auth_route::auth_router, root_route},
-    state::AppState,
-};
+use crate::{errors::Result, routes::auth_route::auth_router, state::AppState};
 
 pub mod consts;
 pub mod errors;
@@ -20,7 +16,7 @@ async fn main() -> Result<()> {
     tracing::subscriber::set_global_default(FmtSubscriber::default()).unwrap();
     let state = AppState::init().await?;
     let app = Router::new()
-        .route("/", get(root_route))
+        //.route("/", get(root_route))
         .nest("/auth", auth_router(state.clone()))
         .with_state(state);
     const PORT: &str = "3587";

@@ -58,7 +58,7 @@ pub struct UserReqWithPassword {
     pub password_hash: String, // ! & (len = 255)
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct User {
     pub id: RecordId,
     pub username: Option<String>,

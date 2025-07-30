@@ -22,7 +22,7 @@ pub struct CreateEmailVerification {
 }
 
 impl CreateEmailVerification {
-    pub fn init(user_id: RecordId) -> Self {
+    pub fn init(user_id: RecordId, token: String) -> Self {
         let expires_at = Local::now() + Duration::hours(1); // add 1 hour
         let expires_at: DateTime<FixedOffset> = expires_at.with_timezone(&expires_at.offset());
         let expires_at = expires_at.to_rfc3339();
@@ -30,8 +30,6 @@ impl CreateEmailVerification {
         let created_at = Local::now() + Duration::hours(1); // add 1 hour
         let created_at: DateTime<FixedOffset> = created_at.with_timezone(&created_at.offset());
         let created_at = created_at.to_rfc3339();
-
-        let token = generate_verification_token();
 
         Self {
             user_id,

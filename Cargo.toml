@@ -33,3 +33,4 @@ thiserror = "2.0.12"
 validator = { version = "0.20.0", features = ["derive"] }
 tower_governor = "0.7.0"
 rand = { version = "0.9.2", features = ["std"] }
+sha2 = "0.10.9"

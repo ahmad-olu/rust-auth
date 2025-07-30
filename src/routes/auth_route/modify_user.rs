@@ -1,4 +1,9 @@
-use axum::{extract::State, http::StatusCode};
+use std::collections::HashMap;
+
+use axum::{
+    extract::{Query, State},
+    http::StatusCode,
+};
 use chrono::{DateTime, Duration, FixedOffset, Local, Utc};
 use tracing::info;
 use validator::Validate;
@@ -11,7 +16,11 @@ use crate::{
         verification::{CreateEmailVerification, EmailVerification},
     },
     state::AppState,
-    utils::{email_verification::generate_verification_token, validated_form::ValidatedJson},
+    utils::{
+        email_verification::{gen_hash_from_token, generate_verification_token},
+        time::time_now,
+        validated_form::ValidatedJson,
+    },
 };
 
 #[derive(Debug, Clone, serde::Deserialize, Validate)]
@@ -24,7 +33,6 @@ pub async fn resend_email_verification(
     State(state): State<AppState>,
     ValidatedJson(input): ValidatedJson<ResendEmailVerificationFormRequest>,
 ) -> Result<(StatusCode, String)> {
-    //TODO:     User requests new verification email
     let get_user: Vec<User> = state
         .sdb
         .query("SELECT * FROM type::table($table) WHERE email = $email;")
@@ -49,22 +57,23 @@ pub async fn resend_email_verification(
         .take(0)?;
 
     for a in check_token {
-        let _:Vec<EmailVerification> = state.sdb.query("UPDATE type::table($table) SET expires_at = time::now() - 1s WHERE user_id = $user_id AND expires_at > time::now();")
-        .bind(("table", EMAIL_VERIFICATION_TABLE))
-        .bind(("user_id", a.id.clone())).await?
-        .take(0)?;
-        // let _: Option<EmailVerification> = state.sdb.delete(a.id.clone()).await?;
+        // let _:Vec<EmailVerification> = state.sdb.query("UPDATE type::table($table) SET expires_at = time::now() - 1s WHERE user_id = $user_id AND expires_at > time::now();")
+        // .bind(("table", EMAIL_VERIFICATION_TABLE))
+        // .bind(("user_id", a.id.clone())).await?
+        // .take(0)?;
+        let _: Option<EmailVerification> = state.sdb.delete(a.id.clone()).await?;
     }
 
-    let token_data = CreateEmailVerification::init(user_id);
-    let create_token: Option<EmailVerification> = state
+    let token = generate_verification_token();
+    let token_data = CreateEmailVerification::init(user_id, token.1);
+    let _: Option<EmailVerification> = state
         .sdb
         .create(EMAIL_VERIFICATION_TABLE)
         .content(token_data)
         .await?;
 
-    info!("verification token = {}", create_token.unwrap().token);
-    // TODO: Send new verification email (https://rust-auth.com/verify_email?token=...)
+    info!("verification token = {}", token.0);
+    // TODO: Send new verification email (https://rust-auth.com/email/verify?token=...)
     // TODO: Log verification email resend event
     return Ok((
         StatusCode::OK,
@@ -72,22 +81,52 @@ pub async fn resend_email_verification(
     ));
 }
 
-pub async fn verify_email(State(state): State<AppState>) -> Result<(StatusCode, String)> {
-    //TODO:      User clicks verification link in email
-    //TODO:  Extract token from URL parameter
-    //TODO:  Validate token format and length
-    //TODO:  Hash received token to match against stored hash
-    //TODO:  Query database for matching token hash
-    //TODO:  Check if token exists and hasn't expired
-    //TODO:  Check if token hasn't already been used
-    //TODO:  Validate associated user account still exists and isn't already verified
-    //TODO:  Update user record: set email_verified = true
-    //TODO:  Mark verification token as used or delete it
-    //TODO:  Update updated_at timestamp
-    //TODO:  Log successful email verification event
-    //TODO:  Redirect user to success page or auto-login
-    //TODO:  Display success message: "Email verified successfully"
-    todo!()
+pub async fn verify_email(
+    State(state): State<AppState>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<(StatusCode, String)> {
+    // ? User clicks verification link in email
+    let q_token = params.get("token");
+    if let Some(q_token) = q_token {
+        let token = gen_hash_from_token(q_token.to_string());
+
+        let check_token: Vec<EmailVerification> = state
+        .sdb
+        .query("SELECT * FROM type::table($table) WHERE token = $token AND expires_at > time::now();") // not already expired
+        .bind(("table", EMAIL_VERIFICATION_TABLE))
+        .bind(("token", token))
+        .await?
+        .take(0)?;
+
+        if !check_token.is_empty() {
+            let token_id = check_token.first().unwrap().id.clone();
+            let user_id = check_token.first().unwrap().user_id.clone();
+
+            let get_user: Vec<User> = state
+        .sdb
+        .query(
+            "SELECT * FROM type::table($table) WHERE id = $id AND auth_provider = $provider AND email_verified != true",
+        )
+        .bind(("table", USER_TABLE))
+        .bind(("id", user_id))
+        .bind(("provider", AuthProvider::Classic))
+        .await?
+        .take(0)?;
+
+            if let Some(user) = get_user.first() {
+                let mut user = user.clone();
+                user.email_verified = Some(true);
+                user.updated_at = Some(time_now());
+                let _: Option<User> = state.sdb.update(user.id.clone()).content(user).await?;
+                let _: Option<EmailVerification> = state.sdb.delete(token_id).await?;
+            }
+            // TODO:  Log successful email verification event
+            // TODO:  Redirect user to success page or auto-login
+        }
+    } else {
+        return Err(Error::NotFound);
+    }
+    return Ok((StatusCode::OK, "Email verified successfully".to_string()));
 }
 
 pub async fn request_email_change(State(state): State<AppState>) -> Result<(StatusCode, String)> {

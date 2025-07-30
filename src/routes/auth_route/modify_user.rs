@@ -4,16 +4,18 @@ use axum::{
     extract::{Query, State},
     http::StatusCode,
 };
-use chrono::{DateTime, Duration, FixedOffset, Local, Utc};
+use surrealdb::RecordId;
 use tracing::info;
 use validator::Validate;
 
 use crate::{
-    consts::auth_const::{EMAIL_VERIFICATION_TABLE, USER_TABLE},
+    consts::auth_const::{EMAIL_CHANGE_TOKEN_TABLE, EMAIL_VERIFICATION_TABLE, USER_TABLE},
     errors::{Error, Result},
     models::{
         user::{AuthProvider, User},
-        verification::{CreateEmailVerification, EmailVerification},
+        verification::{
+            CreateEmailChangeToken, CreateEmailVerification, EmailChangeToken, EmailVerification,
+        },
     },
     state::AppState,
     utils::{
@@ -32,14 +34,16 @@ pub struct ResendEmailVerificationFormRequest {
 pub async fn resend_email_verification(
     State(state): State<AppState>,
     ValidatedJson(input): ValidatedJson<ResendEmailVerificationFormRequest>,
+    //get user id from jwt
 ) -> Result<(StatusCode, String)> {
+    // TODO:  Authenticate current session
+    let user_id = RecordId::from_table_key("user", "aaaaaaaaa"); // placeholder
     let get_user: Vec<User> = state
         .sdb
-        .query("SELECT * FROM type::table($table) WHERE email = $email;")
+        .query("SELECT * FROM type::table($table) WHERE email = $email AND id = $user_id;")
         .bind(("table", USER_TABLE))
         .bind(("email", input.email.clone()))
-        .bind(("email_verified", false))
-        .bind(("provider", AuthProvider::Classic))
+        .bind(("id", user_id))
         .await?
         .take(0)?;
 
@@ -98,9 +102,9 @@ pub async fn verify_email(
         .await?
         .take(0)?;
 
-        if !check_token.is_empty() {
-            let token_id = check_token.first().unwrap().id.clone();
-            let user_id = check_token.first().unwrap().user_id.clone();
+        if let Some(token) = check_token.first() {
+            let token_id = token.id.clone();
+            let user_id = token.user_id.clone();
 
             let get_user: Vec<User> = state
         .sdb
@@ -129,33 +133,106 @@ pub async fn verify_email(
     return Ok((StatusCode::OK, "Email verified successfully".to_string()));
 }
 
-pub async fn request_email_change(State(state): State<AppState>) -> Result<(StatusCode, String)> {
-    //TODO:      User submits new email address
-    //TODO:  Authenticate current session
-    //TODO:  Validate new email format and uniqueness
-    //TODO:  Check current password for security
-    //TODO:  Generate email change token
-    //TODO:  Store pending email change with token (temp table or user field)
-    //TODO:  Send verification email to NEW email address
-    //TODO:  Log email change request event
-    //TODO:  Return success response
-    //TODO:  Display message: "Verification sent to new email address"
-    todo!()
+#[derive(Debug, Clone, serde::Deserialize, Validate)]
+pub struct RequestEmailChangeFormRequest {
+    #[validate(email)]
+    pub new_email: String,
 }
 
-pub async fn confirm_email_change(State(state): State<AppState>) -> Result<(StatusCode, String)> {
-    //TODO:      User clicks verification link for email change
-    //TODO:  Extract and validate token
-    //TODO:  Check token expiration and usage status
-    //TODO:  Retrieve pending email change details
-    //TODO:  Update user email to new address
-    //TODO:  Set email_verified = true
-    //TODO:  Clear pending email change data
-    //TODO:  Invalidate all existing sessions (security measure)
-    //TODO:  Log email change completion event
-    //TODO:  Redirect to login page
-    //TODO:  Display message: "Email updated successfully, please login again"
-    todo!()
+pub async fn request_email_change(
+    State(state): State<AppState>,
+    ValidatedJson(input): ValidatedJson<RequestEmailChangeFormRequest>,
+    //get user id from jwt
+) -> Result<(StatusCode, String)> {
+    // TODO:  Authenticate current session
+    let user_id = RecordId::from_table_key("user", "aaaaaaaaa"); // placeholder
+    // ? TODO:      User submits new email address
+
+    let check_user: Vec<User> = state
+        .sdb
+        .query("SELECT * FROM type::table($table) WHERE email = $email;")
+        .bind(("table", USER_TABLE))
+        .bind(("email", input.new_email.clone()))
+        .await?
+        .take(0)?;
+
+    if !check_user.is_empty() {
+        return Err(Error::EmailExist(input.new_email.clone()));
+    }
+    let _: Vec<EmailChangeToken> = state
+        .sdb
+        .query("DELETE type::table($table) WHERE email = $email;") // not already expired
+        .bind(("table", EMAIL_CHANGE_TOKEN_TABLE))
+        .bind(("email", input.new_email.clone()))
+        .await?
+        .take(0)?;
+
+    let email_change_token = generate_verification_token();
+    let create_email_change_data =
+        CreateEmailChangeToken::init(user_id, input.new_email, email_change_token.1);
+    let _: Option<EmailChangeToken> = state
+        .sdb
+        .create(EMAIL_CHANGE_TOKEN_TABLE)
+        .content(create_email_change_data)
+        .await?;
+    info!("verification token = {}", email_change_token.0);
+    // TODO:  Send verification email to NEW email address
+    // TODO:  Log email change request event
+    return Ok((
+        StatusCode::OK,
+        "Verification sent to new email address. Check your Email Address provided".to_string(),
+    ));
+}
+
+pub async fn confirm_email_change(
+    State(state): State<AppState>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<(StatusCode, String)> {
+    // ? User clicks verification link for email change
+    if let Some(token) = params.get("token") {
+        let token = gen_hash_from_token(token.to_string());
+
+        let check_token: Vec<EmailChangeToken> = state
+        .sdb
+        .query("SELECT * FROM type::table($table) WHERE token = $token AND expires_at > time::now();") // not already expired
+        .bind(("table", EMAIL_CHANGE_TOKEN_TABLE))
+        .bind(("token", token))
+        .await?
+        .take(0)?;
+
+        if let Some(token) = check_token.first() {
+            let token_id = token.id.clone();
+            let user_id = token.user_id.clone();
+            let new_email = token.email.clone();
+
+            let get_user: Vec<User> = state
+        .sdb
+        .query(
+            "SELECT * FROM type::table($table) WHERE id = $id AND auth_provider = $provider AND email_verified != true",
+        )
+        .bind(("table", USER_TABLE))
+        .bind(("id", user_id))
+        .bind(("provider", AuthProvider::Classic))
+        .await?
+        .take(0)?;
+
+            if let Some(user) = get_user.first() {
+                let mut user = user.clone();
+                user.email = new_email;
+                user.email_verified = Some(true);
+                user.updated_at = Some(time_now());
+                let _: Option<User> = state.sdb.update(user.id.clone()).content(user).await?;
+                let _: Option<EmailChangeToken> = state.sdb.delete(token_id).await?;
+            }
+            // TODO:  Log email change completion event
+            // TODO:  Redirect to login page
+        }
+    }
+
+    return Ok((
+        StatusCode::OK,
+        "Email updated successfully, please login again".to_string(),
+    ));
 }
 
 pub async fn request_forgot_password(

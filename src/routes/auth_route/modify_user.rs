@@ -25,6 +25,8 @@ use crate::{
     },
 };
 
+// TODO: make sure deleted_at is check during authentication and authorization
+
 #[derive(Debug, Clone, serde::Deserialize, Validate)]
 pub struct ResendEmailVerificationFormRequest {
     #[validate(email)]
@@ -307,7 +309,24 @@ pub async fn reset_password(State(state): State<AppState>) -> Result<(StatusCode
     todo!()
 }
 
-pub async fn delete_user(State(state): State<AppState>) -> Result<(StatusCode, String)> {
-    // * soft delete to maintain integrity with related memberships, change status to inactive
-    todo!()
+pub async fn delete_user(
+    State(state): State<AppState>, //get user id from jwt
+) -> Result<(StatusCode, String)> {
+    let user_id = RecordId::from_table_key("user", "aaaaaaaaa"); // placeholder
+    let get_user: Vec<User> = state
+        .sdb
+        .query("SELECT * FROM type::table($table) WHERE id = $id;")
+        .bind(("table", USER_TABLE))
+        .bind(("id", user_id))
+        .await?
+        .take(0)?;
+
+    if let Some(user) = get_user.first() {
+        let mut user = user.clone();
+        user.deleted_at = Some(time_now());
+        user.updated_at = Some(time_now());
+        let _: Option<User> = state.sdb.update(user.id.clone()).content(user).await?;
+    }
+
+    return Ok((StatusCode::OK, "User Deleted".to_string()));
 }

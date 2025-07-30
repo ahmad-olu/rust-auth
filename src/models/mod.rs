@@ -5,3 +5,4 @@ pub mod role;
 pub mod team;
 pub mod tokens;
 pub mod user;
+pub mod verification;

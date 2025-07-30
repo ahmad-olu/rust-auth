@@ -1,7 +1,18 @@
 use axum::{extract::State, http::StatusCode};
+use chrono::{DateTime, Duration, FixedOffset, Local, Utc};
+use tracing::info;
 use validator::Validate;
 
-use crate::{errors::Result, state::AppState, utils::validated_form::ValidatedJson};
+use crate::{
+    consts::auth_const::{EMAIL_VERIFICATION_TABLE, USER_TABLE},
+    errors::{Error, Result},
+    models::{
+        user::{AuthProvider, User},
+        verification::{CreateEmailVerification, EmailVerification},
+    },
+    state::AppState,
+    utils::{email_verification::generate_verification_token, validated_form::ValidatedJson},
+};
 
 #[derive(Debug, Clone, serde::Deserialize, Validate)]
 pub struct ResendEmailVerificationFormRequest {
@@ -14,17 +25,51 @@ pub async fn resend_email_verification(
     ValidatedJson(input): ValidatedJson<ResendEmailVerificationFormRequest>,
 ) -> Result<(StatusCode, String)> {
     //TODO:     User requests new verification email
-    //TODO: Validate email exists in system
-    //TODO: Check if email is already verified (prevent unnecessary sends)
-    //TODO: Check rate limiting (prevent spam - max 3 attempts per hour)
-    //TODO: Invalidate any existing unused verification tokens for this user
-    //TODO: Generate new verification token and expiration
-    //TODO: Store new token hash in database
-    //TODO: Send new verification email
-    //TODO: Log verification email resend event
-    //TODO: Return success response
-    //TODO: Display message: "New verification email sent"
-    todo!()
+    let get_user: Vec<User> = state
+        .sdb
+        .query("SELECT * FROM type::table($table) WHERE email = $email;")
+        .bind(("table", USER_TABLE))
+        .bind(("email", input.email.clone()))
+        .bind(("email_verified", false))
+        .bind(("provider", AuthProvider::Classic))
+        .await?
+        .take(0)?;
+
+    if get_user.is_empty() {
+        return Err(Error::EmailNotExist(input.email.clone()));
+    }
+
+    let user_id = get_user.first().unwrap().id.clone();
+    let check_token: Vec<EmailVerification> = state
+        .sdb
+        .query("SELECT * FROM type::table($table) WHERE user_id = $user_id AND expires_at > time::now();") // not already expired
+        .bind(("table", EMAIL_VERIFICATION_TABLE))
+        .bind(("user_id", user_id.clone()))
+        .await?
+        .take(0)?;
+
+    for a in check_token {
+        let _:Vec<EmailVerification> = state.sdb.query("UPDATE type::table($table) SET expires_at = time::now() - 1s WHERE user_id = $user_id AND expires_at > time::now();")
+        .bind(("table", EMAIL_VERIFICATION_TABLE))
+        .bind(("user_id", a.id.clone())).await?
+        .take(0)?;
+        // let _: Option<EmailVerification> = state.sdb.delete(a.id.clone()).await?;
+    }
+
+    let token_data = CreateEmailVerification::init(user_id);
+    let create_token: Option<EmailVerification> = state
+        .sdb
+        .create(EMAIL_VERIFICATION_TABLE)
+        .content(token_data)
+        .await?;
+
+    info!("verification token = {}", create_token.unwrap().token);
+    // TODO: Send new verification email (https://rust-auth.com/verify_email?token=...)
+    // TODO: Log verification email resend event
+    return Ok((
+        StatusCode::OK,
+        "New verification email sent. Check your Email Address provided".to_string(),
+    ));
 }
 
 pub async fn verify_email(State(state): State<AppState>) -> Result<(StatusCode, String)> {

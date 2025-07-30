@@ -40,6 +40,9 @@ pub enum Error {
     #[error("User with email `{0}` already exists!")]
     EmailExist(String),
 
+    #[error("User with email `{0}` does not exists!")]
+    EmailNotExist(String),
+
     #[error("unknown Error")]
     Unknown,
     #[error("Not Found")]
@@ -90,6 +93,12 @@ impl IntoResponse for Error {
             Error::EmailExist(email) => (
                 StatusCode::BAD_REQUEST,
                 format!("User with email {} already exists!", email),
+            )
+                .into_response(),
+
+            Error::EmailNotExist(email) => (
+                StatusCode::BAD_REQUEST,
+                format!("User with email {} does not exists or verified!", email),
             )
                 .into_response(),
             Error::Unknown => (StatusCode::BAD_REQUEST, "Unknown").into_response(),

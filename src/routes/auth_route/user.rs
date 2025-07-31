@@ -55,7 +55,7 @@ pub async fn sign_up(
         username: input.username,
         email: input.email.clone(),
         auth_provider: AuthProvider::Classic,
-        created_at,
+        created_at: created_at.clone(),
         email_verified: false,
         status: UserStatus::Active,
     };
@@ -64,6 +64,8 @@ pub async fn sign_up(
         let auth_password = UserReqWithPassword {
             user_id: user.id,
             password_hash,
+            created_at,
+            updated_at: None,
         };
         let _: Option<UserWithPassword> = state
             .sdb

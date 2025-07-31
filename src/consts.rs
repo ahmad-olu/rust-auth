@@ -3,6 +3,7 @@ pub mod auth_const {
     pub const AUTH_PASSWORD_TABLE: &str = "auth_passwords";
     pub const EMAIL_VERIFICATION_TABLE: &str = "email_verifications";
     pub const EMAIL_CHANGE_TOKEN_TABLE: &str = "email_change_tokens";
+    pub const PASSWORD_RESET_TOKEN_TABLE: &str = "password_reset_tokens";
     pub const ORGANIZATION_TABLE: &str = "organizations";
     pub const ORGANIZATION_MEMBERSHIP_TABLE: &str = "organization_memberships";
     pub const TEAM_TABLE: &str = "teams";

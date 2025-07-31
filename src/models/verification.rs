@@ -25,7 +25,7 @@ impl CreateEmailVerification {
         let expires_at: DateTime<FixedOffset> = expires_at.with_timezone(&expires_at.offset());
         let expires_at = expires_at.to_rfc3339();
 
-        let created_at = Local::now() + Duration::hours(1); // add 1 hour
+        let created_at = Local::now();
         let created_at: DateTime<FixedOffset> = created_at.with_timezone(&created_at.offset());
         let created_at = created_at.to_rfc3339();
 
@@ -63,7 +63,7 @@ impl CreateEmailChangeToken {
         let expires_at: DateTime<FixedOffset> = expires_at.with_timezone(&expires_at.offset());
         let expires_at = expires_at.to_rfc3339();
 
-        let created_at = Local::now() + Duration::hours(1); // add 1 hour
+        let created_at = Local::now();
         let created_at: DateTime<FixedOffset> = created_at.with_timezone(&created_at.offset());
         let created_at = created_at.to_rfc3339();
 
@@ -76,3 +76,39 @@ impl CreateEmailChangeToken {
         }
     }
 }
+
+// #[derive(Deserialize, Debug, Clone)]
+// pub struct PasswordChangeToken {
+//     pub id: RecordId,
+//     pub email: String,
+//     pub token: String,
+//     pub created_at: String,
+//     pub expires_at: String,
+// }
+
+// #[derive(Serialize, Debug, Clone)]
+// pub struct PasswordEmailChangeToken {
+//     pub token: String,
+//     pub email: String,
+//     pub created_at: String,
+//     pub expires_at: String,
+// }
+
+// impl PasswordEmailChangeToken {
+//     pub fn init(email: String, token: String) -> Self {
+//         let expires_at = Local::now() + Duration::hours(1); // add 1 hour
+//         let expires_at: DateTime<FixedOffset> = expires_at.with_timezone(&expires_at.offset());
+//         let expires_at = expires_at.to_rfc3339();
+
+//         let created_at = Local::now();
+//         let created_at: DateTime<FixedOffset> = created_at.with_timezone(&created_at.offset());
+//         let created_at = created_at.to_rfc3339();
+
+//         Self {
+//             email,
+//             token,
+//             created_at,
+//             expires_at,
+//         }
+//     }
+// }

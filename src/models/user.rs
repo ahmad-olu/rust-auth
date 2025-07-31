@@ -45,17 +45,21 @@ pub enum UserStatus {
     InActive,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct UserWithPassword {
     pub id: RecordId,
     pub user_id: RecordId,
     pub password_hash: String, // ! & (len = 255)
+    pub created_at: String,
+    pub updated_at: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize)]
 pub struct UserReqWithPassword {
     pub user_id: RecordId,
     pub password_hash: String, // ! & (len = 255)
+    pub created_at: String,
+    pub updated_at: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

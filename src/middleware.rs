@@ -4,12 +4,13 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use surrealdb::RecordId;
 
 use crate::errors::{Error, Result as RResult};
 use crate::utils::jwt::decode_jwt;
 
 #[derive(Debug, Clone)]
-pub struct UserId(pub String);
+pub struct UserId(pub RecordId);
 
 pub async fn auth_jwt_middleware(
     request: Request,
@@ -49,7 +50,12 @@ async fn check_auth_parts(parts: &Parts) -> RResult<UserId> {
         return Err(Error::InvalidScheme);
     }
 
-    decode_jwt(token).map(|data| UserId(data.claims.id))
+    decode_jwt(token).map(|data| {
+        let mut id_part = data.claims.id.trim().splitn(2, ':');
+        let table = id_part.next().unwrap();
+        let key = id_part.next().unwrap();
+        UserId(RecordId::from_table_key(table, key))
+    })
 }
 
 impl<S> FromRequest<S> for UserId

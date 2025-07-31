@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use axum::{
+    Extension,
     extract::{Query, State},
     http::StatusCode,
 };
@@ -11,6 +12,7 @@ use validator::Validate;
 use crate::{
     consts::auth_const::{EMAIL_CHANGE_TOKEN_TABLE, EMAIL_VERIFICATION_TABLE, USER_TABLE},
     errors::{Error, Result},
+    middleware::UserId,
     models::{
         user::{AuthProvider, User},
         verification::{
@@ -35,11 +37,9 @@ pub struct ResendEmailVerificationFormRequest {
 
 pub async fn resend_email_verification(
     State(state): State<AppState>,
+    Extension(UserId(user_id)): Extension<UserId>,
     ValidatedJson(input): ValidatedJson<ResendEmailVerificationFormRequest>,
-    //get user id from jwt
 ) -> Result<(StatusCode, String)> {
-    // TODO:  Authenticate current session
-    let user_id = RecordId::from_table_key("user", "aaaaaaaaa"); // placeholder
     let get_user: Vec<User> = state
         .sdb
         .query("SELECT * FROM type::table($table) WHERE email = $email AND id = $user_id;")
@@ -143,11 +143,9 @@ pub struct RequestEmailChangeFormRequest {
 
 pub async fn request_email_change(
     State(state): State<AppState>,
+    Extension(UserId(user_id)): Extension<UserId>,
     ValidatedJson(input): ValidatedJson<RequestEmailChangeFormRequest>,
-    //get user id from jwt
 ) -> Result<(StatusCode, String)> {
-    // TODO:  Authenticate current session
-    let user_id = RecordId::from_table_key("user", "aaaaaaaaa"); // placeholder
     // ? TODO:      User submits new email address
 
     let check_user: Vec<User> = state
@@ -286,7 +284,8 @@ pub async fn forgotten_password_token_validation(
 }
 
 pub async fn reset_password(
-    State(state): State<AppState>, //get user id from jwt
+    State(state): State<AppState>,
+    Extension(UserId(user_id)): Extension<UserId>,
 ) -> Result<(StatusCode, String)> {
     //TODO:      User submits new password form
     //TODO:  Extract reset token from form/session
@@ -312,9 +311,9 @@ pub async fn reset_password(
 }
 
 pub async fn delete_user(
-    State(state): State<AppState>, //get user id from jwt
+    State(state): State<AppState>,
+    Extension(UserId(user_id)): Extension<UserId>,
 ) -> Result<(StatusCode, String)> {
-    let user_id = RecordId::from_table_key("user", "aaaaaaaaa"); // placeholder
     let get_user: Vec<User> = state
         .sdb
         .query("SELECT * FROM type::table($table) WHERE id = $id;")
@@ -324,10 +323,13 @@ pub async fn delete_user(
         .take(0)?;
 
     if let Some(user) = get_user.first() {
+        // ! 1. soft delete
         let mut user = user.clone();
         user.deleted_at = Some(time_now());
         user.updated_at = Some(time_now());
         let _: Option<User> = state.sdb.update(user.id.clone()).content(user).await?;
+
+        // ! 2. delete all relation to user then delete user
     }
 
     return Ok((StatusCode::OK, "User Deleted".to_string()));

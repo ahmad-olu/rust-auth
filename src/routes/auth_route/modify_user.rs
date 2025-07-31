@@ -391,26 +391,50 @@ pub async fn reset_password(
     ValidatedForm(input): ValidatedForm<ResetPasswordFormRequest>,
 ) -> Result<(StatusCode, String)> {
     // ?  User submits new password form
-    //TODO:  Extract reset token from form/session
-    //TODO:  Validate token is still valid and unused
-    //TODO:  Validate new password meets strength
-    //TODO:    - Minimum length (8+ characters)
-    //TODO:    - Contains uppercase, lowercase, numbers
-    //TODO:    - Not in common password dictionary
-    //TODO:    - Not same as current password
-    //TODO:  Confirm password matches confirmation field
-    //TODO:  Hash new password using bcrypt/Argon2
-    //TODO:  Begin database transaction
-    //TODO:  Update user password_hash field
-    //TODO:  Mark reset token as used (set used_at timestamp)
-    //TODO:  Update user's updated_at timestamp
-    //TODO:  Invalidate all existing user sessions (security measure)
-    //TODO:  Commit transaction
-    //TODO:  Log successful password reset event
-    //TODO:  Send password change confirmation email
-    //TODO:  Redirect to login page with success message
-    //TODO:  Display message: "Password reset successfully, please login"
-    todo!()
+
+    let user_p: Vec<UserWithPassword> = state
+        .sdb
+        .query("SELECT * FROM type::table($table) WHERE user_id = $user_id;")
+        .bind(("table", AUTH_PASSWORD_TABLE))
+        .bind(("user_id", user_id.clone()))
+        .await?
+        .take(0)?;
+
+    if let Some(user) = user_p.first() {
+        let user = user.clone();
+        let hash_input_password = hash(input.password.as_bytes())?;
+        if hash_input_password == user.password_hash {
+            return Err(Error::Unknown);
+        }
+
+        let get_user: Vec<UserWithPassword> = state
+        .sdb
+        .query(
+            "SELECT * FROM type::table($table) WHERE user_id = $user_id AND user_id.auth_provider = $provider;",
+        )
+        .bind(("table", AUTH_PASSWORD_TABLE))
+        .bind(("user_id", user_id))
+        .bind(("provider", AuthProvider::Classic))
+        .await?
+        .take(0)?;
+
+        if let Some(user) = get_user.first() {
+            let mut user = user.clone();
+            user.password_hash = hash_input_password;
+            user.updated_at = Some(time_now());
+            let _: Option<User> = state.sdb.update(user.id.clone()).content(user).await?;
+        }
+        // TODO:  Validate new password meets strength
+        // TODO:    - Not in common password dictionary
+        // TODO:  Hash new password using bcrypt/Argon2
+        // TODO:  Log successful password reset event
+        // TODO:  Send password change confirmation email
+        // TODO:  Redirect to login page with success message
+    }
+    return Ok((
+        StatusCode::OK,
+        "Password reset successfully, please login again".to_string(),
+    ));
 }
 
 pub async fn delete_user(

@@ -27,7 +27,7 @@ pub struct SignUpFormRequest {
     pub password: String,
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SignUpFormResponse {
     msg: String,
 }
@@ -103,7 +103,7 @@ pub struct SignInFormRequest {
     pub password: String,
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SignInFormResponse {
     pub access_token: String,
     refresh_token: String,
@@ -161,4 +161,117 @@ pub async fn sign_in(
         };
     }
     Err(Error::InvalidLoginDetails)
+}
+
+#[cfg(test)]
+mod user_tests {
+    use std::sync::Mutex;
+
+    use axum::{
+        body::Body,
+        http::{
+            Request, StatusCode,
+            header::{AUTHORIZATION, CONTENT_TYPE},
+        },
+    };
+    use http_body_util::BodyExt;
+    use once_cell::sync::Lazy;
+    use serde_json::json;
+    use tower::ServiceExt; // for `collect`
+
+    use crate::{
+        app,
+        routes::auth_route::user::{SignInFormResponse, SignUpFormResponse},
+        state::AppState,
+    };
+
+    const SIGN_UP_URI: &str = "/auth/signup";
+    const SIGN_IN_URI: &str = "/auth/signin";
+    const DELETE_IN_URI: &str = "/auth/user";
+
+    // static mut TOKEN: Option<String> = None;
+    static TOKEN: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
+
+    #[tokio::test]
+    async fn test_full_auth_flow() {
+        test_sign_up().await;
+        test_sign_in().await;
+        test_delete_user().await;
+    }
+
+    async fn test_sign_up() {
+        let state = AppState::init().await.unwrap();
+        let app = app(state);
+
+        // sign up
+        // let form_data =
+        //     "email=maloree@email.com&username=myverysexyUsername&password=myVerySecuredPassword$22";
+        let form_data = "email=alana3%40gmail.com&username=allana3&password=Allana%24n09878";
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(SIGN_UP_URI)
+                    .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    //  .body(Body::from(serde_json::to_vec(&json!({"":""})).unwrap()))
+                    .body(Body::from(form_data))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        // user with email: {} created
+        let body_bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let body: SignUpFormResponse = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(body.msg.trim(), "user with email: alana3@gmail.com created");
+    }
+
+    async fn test_sign_in() {
+        let state = AppState::init().await.unwrap();
+        let app = app(state);
+
+        let form_data = "email=alana3%40gmail.com&password=Allana%24n09878";
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(SIGN_IN_URI)
+                    .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    //  .body(Body::from(serde_json::to_vec(&json!({"":""})).unwrap()))
+                    .body(Body::from(form_data))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let body: SignInFormResponse = serde_json::from_slice(&body_bytes).unwrap();
+        *TOKEN.lock().unwrap() = Some(format!("Bearer {}", body.access_token));
+        assert_eq!(body.token_type, "Bearer");
+    }
+
+    async fn test_delete_user() {
+        let state = AppState::init().await.unwrap();
+        let app = app(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(DELETE_IN_URI)
+                    .header(AUTHORIZATION, TOKEN.lock().unwrap().clone().unwrap())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
 }

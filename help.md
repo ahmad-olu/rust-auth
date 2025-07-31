@@ -24,3 +24,7 @@ Note: `cargo-leptos watch --hot-reload` only works with the `nightly`
 
 <!-- https://github.com/MikeCode00/Dioxus-Full-Stack-SQLite-To-Do-App/blob/main/Cargo.toml -->
 
+- https://www.youtube.com/watch?v=w9rkil0dotI
+- https://www.youtube.com/watch?v=DW9gNduZATE
+- https://www.youtube.com/watch?v=itK6BSSe5DA
+- https://www.youtube.com/watch?v=betxwPpX8Bw

@@ -285,7 +285,9 @@ pub async fn forgotten_password_token_validation(
     todo!()
 }
 
-pub async fn reset_password(State(state): State<AppState>) -> Result<(StatusCode, String)> {
+pub async fn reset_password(
+    State(state): State<AppState>, //get user id from jwt
+) -> Result<(StatusCode, String)> {
     //TODO:      User submits new password form
     //TODO:  Extract reset token from form/session
     //TODO:  Validate token is still valid and unused

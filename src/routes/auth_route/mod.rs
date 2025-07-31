@@ -4,27 +4,40 @@ use tower_governor::{
 };
 
 use axum::{
-    Router,
+    Router, middleware,
     routing::{delete, get, post},
 };
 
 use crate::{
-    routes::auth_route::{
-        modify_user::{
-            confirm_email_change, delete_user, forgotten_password_token_validation,
-            request_email_change, request_forgot_password, resend_email_verification,
-            reset_password, verify_email,
+    middleware::auth_jwt_middleware,
+    routes::{
+        auth_route::{
+            modify_user::{
+                confirm_email_change, delete_user, forgotten_password_token_validation,
+                request_email_change, request_forgot_password, resend_email_verification,
+                reset_password, verify_email,
+            },
+            user::{sign_in, sign_up},
         },
-        user::{sign_in, sign_up},
+        root_route,
     },
     state::AppState,
 };
 
+pub mod invitation;
 pub mod modify_user;
+pub mod organization;
+pub mod role;
+pub mod teams;
 pub mod user;
 
 pub fn auth_router(config: AppState) -> Router<AppState> {
     // ? rate limiter for resend email verification
+
+    Router::new().merge(user(config.clone())).with_state(config)
+}
+
+fn user(config: AppState) -> Router<AppState> {
     let governor_conf = Arc::new(
         GovernorConfigBuilder::default()
             .per_second(3600)
@@ -43,25 +56,43 @@ pub fn auth_router(config: AppState) -> Router<AppState> {
             governor_limiter.retain_recent();
         }
     });
+    let unprotected = |config: AppState| -> Router<AppState> {
+        Router::new()
+            .route("/signin", post(sign_in))
+            .route("/signup", post(sign_up))
+            .route("/email/verify", get(verify_email))
+            .route("/email/change-confirm", post(confirm_email_change))
+            .route(
+                "/password/validate-token",
+                post(forgotten_password_token_validation),
+            )
+            .route("/password/reset", post(reset_password))
+            .with_state(config)
+    };
+    let protected = |config: AppState| -> Router<AppState> {
+        Router::new()
+            .route("/test", get(root_route))
+            .route(
+                "/email/resend-verification",
+                post(resend_email_verification).layer(GovernorLayer {
+                    config: governor_conf.clone(),
+                }),
+            )
+            .route(
+                "/email/change-request",
+                post(request_email_change).layer(GovernorLayer {
+                    config: governor_conf,
+                }),
+            )
+            .route("/password/reset-request", post(request_forgot_password))
+            .route("/user", delete(delete_user))
+            .layer(middleware::from_fn(auth_jwt_middleware))
+            .with_state(config)
+    };
     Router::new()
-        //  .route("/", get(root_route))
-        .route("/signin", post(sign_in))
-        .route("/signup", post(sign_up))
-        .route(
-            "/email/resend-verification",
-            post(resend_email_verification).layer(GovernorLayer {
-                config: governor_conf,
-            }),
-        )
-        .route("/email/verify", get(verify_email))
-        .route("/email/change-request", post(request_email_change))
-        .route("/email/change-confirm", post(confirm_email_change))
-        .route("/password/reset-request", post(request_forgot_password))
-        .route(
-            "/password/validate-token",
-            post(forgotten_password_token_validation),
-        )
-        .route("/password/reset", post(reset_password))
-        .route("/delete", delete(delete_user))
+        .merge(unprotected(config.clone()))
+        .merge(protected(config.clone()))
         .with_state(config)
 }
+
+// TODO : other auth to consider: two factor, username, anonymous, phone number, magic link, email otp, passkey, generic oauth, one tap

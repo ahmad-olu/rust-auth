@@ -6,6 +6,7 @@ use crate::{errors::Result, routes::auth_route::auth_router, state::AppState};
 
 pub mod consts;
 pub mod errors;
+pub mod middleware;
 pub mod models;
 pub mod routes;
 pub mod state;

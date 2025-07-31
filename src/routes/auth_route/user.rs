@@ -181,6 +181,7 @@ mod user_tests {
 
     use crate::{
         app,
+        consts::auth_const::{AUTH_PASSWORD_TABLE, USER_TABLE},
         routes::auth_route::user::{SignInFormResponse, SignUpFormResponse},
         state::AppState,
     };
@@ -197,8 +198,94 @@ mod user_tests {
         test_sign_up().await;
         test_sign_in().await;
         test_delete_user().await;
+        clear_data().await;
     }
 
+    #[tokio::test]
+    async fn test_full_possible_error_auth_flow() {
+        test_form_body_validation().await;
+        clear_data().await;
+    }
+
+    async fn test_form_body_validation() {
+        let state = AppState::init().await.unwrap();
+        let app = app(state);
+
+        let form_data = [
+            "email=maloree&username=allana3&password=Allana%24n09878",
+            "email=maloree%40gmail.com&username=__allana3&password=Allana%24n09878",
+            "email=maloree%40gmail.com&username=admin&password=Allana%24n09878",
+            "email=maloree%40gmail.com&username=root&password=Allana%24n09878",
+            "email=maloree%40gmail.com&username=al&password=Allana%24n09878",
+            "email=maloree%40gmail.com&username=allana3&password=Allana%24",
+            "email=maloree%40gmail.com&username=allana3&password=Allanan09878",
+            "email=maloree%40gmail.com&username=allana3&password=Alla",
+        ];
+        for f in form_data {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri(SIGN_UP_URI)
+                        .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+                        //  .body(Body::from(serde_json::to_vec(&json!({"":""})).unwrap()))
+                        .body(Body::from(f))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        }
+        // ? sign up
+        let form_data = "email=maloree%40gmail.com&username=allana3&password=Allana%24n09878";
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(SIGN_UP_URI)
+                    .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    //  .body(Body::from(serde_json::to_vec(&json!({"":""})).unwrap()))
+                    .body(Body::from(form_data))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        // ? delete but fail
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(DELETE_IN_URI)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // ? delete but fail 2
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(DELETE_IN_URI)
+                    .header(AUTHORIZATION, format!("Bearer 124543"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
     async fn test_sign_up() {
         let state = AppState::init().await.unwrap();
         let app = app(state);
@@ -273,5 +360,14 @@ mod user_tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+    async fn clear_data() {
+        #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+        pub struct Record {
+            pub id: surrealdb::RecordId,
+        }
+        let state = AppState::init().await.unwrap();
+        let _: Vec<Record> = state.sdb.delete(USER_TABLE).await.unwrap();
+        let _: Vec<Record> = state.sdb.delete(AUTH_PASSWORD_TABLE).await.unwrap();
     }
 }

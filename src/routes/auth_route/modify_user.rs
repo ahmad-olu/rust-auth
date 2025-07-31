@@ -29,6 +29,7 @@ use crate::{
         pwd::hash,
         time::time_now,
         validated_form::{ValidatedForm, ValidatedJson},
+        validator::validate_password,
     },
 };
 
@@ -308,9 +309,9 @@ pub async fn request_forgot_password(
 
 #[derive(Debug, Clone, serde::Deserialize, Validate)]
 pub struct ForgottenPasswordFormRequest {
-    #[validate(length(min = 8, max = 16))]
+    #[validate(length(min = 8, max = 16), custom(function = "validate_password"))]
     pub password: String,
-    #[validate(length(min = 8, max = 16))]
+    #[validate(length(min = 8, max = 16), custom(function = "validate_password"))]
     pub confirm_password: String,
     pub token: Option<String>,
 }
@@ -376,11 +377,20 @@ pub async fn forgotten_password_token_validation(
     ));
 }
 
+#[derive(Debug, Clone, serde::Deserialize, Validate)]
+pub struct ResetPasswordFormRequest {
+    #[validate(length(min = 8, max = 16), custom(function = "validate_password"))]
+    pub password: String,
+    #[validate(length(min = 8, max = 16), custom(function = "validate_password"))]
+    pub confirm_password: String,
+}
+
 pub async fn reset_password(
     State(state): State<AppState>,
     Extension(UserId(user_id)): Extension<UserId>,
+    ValidatedForm(input): ValidatedForm<ResetPasswordFormRequest>,
 ) -> Result<(StatusCode, String)> {
-    //TODO:      User submits new password form
+    // ?  User submits new password form
     //TODO:  Extract reset token from form/session
     //TODO:  Validate token is still valid and unused
     //TODO:  Validate new password meets strength

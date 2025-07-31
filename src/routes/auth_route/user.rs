@@ -13,6 +13,7 @@ use crate::{
         jwt::{Claims, encode_jwt},
         pwd::{hash, validate},
         validated_form::ValidatedForm,
+        validator::{validate_password, validate_username},
     },
 };
 
@@ -20,8 +21,9 @@ use crate::{
 pub struct SignUpFormRequest {
     #[validate(email)]
     pub email: String,
+    #[validate(custom(function = "validate_username"))]
     pub username: String,
-    #[validate(length(min = 8, max = 16))]
+    #[validate(length(min = 8, max = 16), custom(function = "validate_password"))]
     pub password: String,
 }
 
@@ -97,7 +99,7 @@ pub async fn sign_up(
 pub struct SignInFormRequest {
     #[validate(email)]
     pub email: String,
-    #[validate(length(min = 8, max = 16))]
+    #[validate(length(min = 8, max = 16), custom(function = "validate_password"))]
     pub password: String,
 }
 

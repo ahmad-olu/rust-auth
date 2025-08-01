@@ -115,7 +115,7 @@ pub async fn sign_in(
     let get_user: Vec<UserWithPassword> = state
         .sdb
         .query(
-            "SELECT * FROM type::table($table) WHERE user_id.email = $email AND user_id.auth_provider = $provider",
+            "SELECT * FROM type::table($table) WHERE user_id.email = $email AND user_id.auth_provider = $provider AND user_id.deleted_at == None;",
         )
         .bind(("table", AUTH_PASSWORD_TABLE))
         .bind(("email", input.email))

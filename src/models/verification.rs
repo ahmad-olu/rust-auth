@@ -2,6 +2,8 @@ use chrono::{DateTime, Duration, FixedOffset, Local};
 use serde::{Deserialize, Serialize};
 use surrealdb::RecordId;
 
+use crate::utils::time::{time_now, time_now_plus_one_hour};
+
 #[derive(Deserialize, Debug, Clone)]
 pub struct EmailVerification {
     pub id: RecordId,
@@ -21,19 +23,11 @@ pub struct CreateEmailVerification {
 
 impl CreateEmailVerification {
     pub fn init(user_id: RecordId, token: String) -> Self {
-        let expires_at = Local::now() + Duration::hours(1); // add 1 hour
-        let expires_at: DateTime<FixedOffset> = expires_at.with_timezone(&expires_at.offset());
-        let expires_at = expires_at.to_rfc3339();
-
-        let created_at = Local::now();
-        let created_at: DateTime<FixedOffset> = created_at.with_timezone(&created_at.offset());
-        let created_at = created_at.to_rfc3339();
-
         Self {
             user_id,
             token,
-            created_at,
-            expires_at,
+            created_at: time_now(),
+            expires_at: time_now_plus_one_hour(),
         }
     }
 }
@@ -59,20 +53,12 @@ pub struct CreateEmailChangeToken {
 
 impl CreateEmailChangeToken {
     pub fn init(user_id: RecordId, email: String, token: String) -> Self {
-        let expires_at = Local::now() + Duration::hours(1); // add 1 hour
-        let expires_at: DateTime<FixedOffset> = expires_at.with_timezone(&expires_at.offset());
-        let expires_at = expires_at.to_rfc3339();
-
-        let created_at = Local::now();
-        let created_at: DateTime<FixedOffset> = created_at.with_timezone(&created_at.offset());
-        let created_at = created_at.to_rfc3339();
-
         Self {
             user_id,
             email,
             token,
-            created_at,
-            expires_at,
+            created_at: time_now(),
+            expires_at: time_now_plus_one_hour(),
         }
     }
 }

@@ -61,30 +61,32 @@ fn user(config: AppState) -> Router<AppState> {
             .route("/signin", post(sign_in))
             .route("/signup", post(sign_up))
             .route("/email/verify", get(verify_email))
-            .route("/email/change-confirm", post(confirm_email_change))
+            .route("/email/change-confirm", get(confirm_email_change))
+            .route("/password/reset-request", post(request_forgot_password))
             .route(
                 "/password/validate-token",
                 post(forgotten_password_token_validation),
             )
-            .route("/password/reset", post(reset_password))
             .with_state(config)
     };
     let protected = |config: AppState| -> Router<AppState> {
         Router::new()
-            .route("/test", get(root_route))
+            // .route("/test", get(root_route))
             .route(
                 "/email/resend-verification",
-                post(resend_email_verification).layer(GovernorLayer {
-                    config: governor_conf.clone(),
-                }),
+                post(resend_email_verification), // ! FIXME: Rate limiter causing error
+                                                 // .layer(GovernorLayer {
+                                                 //     config: governor_conf,
+                                                 // }),
             )
             .route(
                 "/email/change-request",
-                post(request_email_change).layer(GovernorLayer {
-                    config: governor_conf,
-                }),
+                post(request_email_change), // ! FIXME: Rate limiter causing error
+                                            // .layer(GovernorLayer {
+                                            //     config: governor_conf,
+                                            // }),
             )
-            .route("/password/reset-request", post(request_forgot_password))
+            .route("/password/reset", post(reset_password))
             .route("/user", delete(delete_user))
             .layer(middleware::from_fn(auth_jwt_middleware))
             .with_state(config)

@@ -1,0 +1,75 @@
+@host = http://127.0.0.1:3587
+@bearer_token = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6InVzZXJzOmpqa3Fmd2x0ZzBtbGludXFrN3ExIiwiZXhwIjoxNzU0MDU5NzY2LCJpYXQiOjE3NTQwNTk1ODYsImlzcyI6Ik1hbmdvZSJ9.lID4LI7OiK6NQARsWGIDKACYzAjM5gR-plT0c8erYtA
+
+
+
+### ! sign up
+POST {{host}}/auth/signup
+Content-Type: application/x-www-form-urlencoded
+
+username=testuser&email=test%40example.com&password=Supersecure%40123
+
+
+### ! sign In
+POST {{host}}/auth/signin
+Content-Type: application/x-www-form-urlencoded
+
+email=test%40example.com&password=Supersecure%40123
+
+
+### ! resend email verification
+POST {{host}}/auth/email/resend-verification
+Content-Type: application/json
+Authorization: Bearer {{bearer_token}}
+
+{
+    "email":"test@example.com"
+}
+
+@email_verification_token =BC2v9I2ZubBV4dgSUoCpbdpDjidkkMyE
+
+### ! confirm email verification
+GET {{host}}/auth/email/verify?token={{email_verification_token}}
+Content-Type: application/json
+
+### ! email change
+POST {{host}}/auth/email/change-request
+Content-Type: application/json
+Authorization: Bearer {{bearer_token}}
+
+{
+    "new_email":"test55@example.com"
+}
+
+@email_change_token = ddTBtcE1hAoNrwCDtfhqIu5bSML9f27N
+
+### ! confirm email change
+GET {{host}}/auth/email/change-confirm?token={{email_change_token}}
+Content-Type: application/json
+
+### ! forgot password
+POST {{host}}/auth/password/reset-request
+Content-Type: application/json
+
+{
+    "email":"test@example.com"
+}
+
+@password_change_token = NS21ktd3zAMf1mocJP5kysQjpUaBfpi3
+
+### ! confirm password change
+POST {{host}}/auth/password/validate-token?token={{password_change_token}}
+Content-Type: application/x-www-form-urlencoded
+
+password=Yhhdudbdjj%4045&confirm_password=Yhhdudbdjj%4045&token=
+
+### ! reset password
+POST {{host}}/auth/password/reset
+Content-Type: application/x-www-form-urlencoded
+Authorization: Bearer {{bearer_token}}
+
+password=RTF4dffg%4045&confirm_password=RTF4dffg%4045
+
+### ! delete user
+DELETE {{host}}/auth/user
+Authorization: Bearer {{bearer_token}}

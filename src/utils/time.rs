@@ -1,8 +1,13 @@
-use chrono::{DateTime, Duration, FixedOffset, Local};
+use chrono::{DateTime, Duration, Local, SecondsFormat, Utc};
 
 pub fn time_now() -> String {
+    let created_at = Local::now();
+    let created_at_utc: DateTime<Utc> = created_at.with_timezone(&Utc);
+    created_at_utc.to_rfc3339_opts(SecondsFormat::Millis, true)
+}
+
+pub fn time_now_plus_one_hour() -> String {
     let created_at = Local::now() + Duration::hours(1); // add 1 hour
-    let created_at: DateTime<FixedOffset> = created_at.with_timezone(&created_at.offset());
-    let created_at = created_at.to_rfc3339();
-    created_at
+    let created_at_utc: DateTime<Utc> = created_at.with_timezone(&Utc);
+    created_at_utc.to_rfc3339_opts(SecondsFormat::Millis, true)
 }

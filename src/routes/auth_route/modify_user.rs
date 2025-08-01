@@ -48,7 +48,7 @@ pub async fn resend_email_verification(
 ) -> Result<(StatusCode, String)> {
     let get_user: Vec<User> = state
         .sdb
-        .query("SELECT * FROM type::table($table) WHERE email = $email AND id = $user_id;")
+        .query("SELECT * FROM type::table($table) WHERE email = $email AND id = $id;")
         .bind(("table", USER_TABLE))
         .bind(("email", input.email.clone()))
         .bind(("id", user_id))
@@ -104,9 +104,9 @@ pub async fn verify_email(
 
         let check_token: Vec<EmailVerification> = state
         .sdb
-        .query("SELECT * FROM type::table($table) WHERE token = $token AND expires_at > time::now();") // not already expired
+        .query("SELECT * FROM type::table($table) WHERE token = $e_token AND expires_at < time::now();")
         .bind(("table", EMAIL_VERIFICATION_TABLE))
-        .bind(("token", token))
+        .bind(("e_token", token))
         .await?
         .take(0)?;
 
@@ -200,9 +200,9 @@ pub async fn confirm_email_change(
 
         let check_token: Vec<EmailChangeToken> = state
         .sdb
-        .query("SELECT * FROM type::table($table) WHERE token = $token AND expires_at > time::now();") // not already expired
+        .query("SELECT * FROM type::table($table) WHERE token = $e_token AND expires_at < time::now();") // not already expired
         .bind(("table", EMAIL_CHANGE_TOKEN_TABLE))
-        .bind(("token", token))
+        .bind(("e_token", token))
         .await?
         .take(0)?;
 
@@ -336,9 +336,9 @@ pub async fn forgotten_password_token_validation(
 
         let check_token: Vec<EmailChangeToken> = state
         .sdb
-        .query("SELECT * FROM type::table($table) WHERE token = $token AND expires_at > time::now();") // not already expired
+        .query("SELECT * FROM type::table($table) WHERE token = $p_token AND expires_at < time::now();") // not already expired
         .bind(("table", PASSWORD_RESET_TOKEN_TABLE))
-        .bind(("token", token))
+        .bind(("p_token", token))
         .await?
         .take(0)?;
 
@@ -422,7 +422,8 @@ pub async fn reset_password(
             let mut user = user.clone();
             user.password_hash = hash_input_password;
             user.updated_at = Some(time_now());
-            let _: Option<User> = state.sdb.update(user.id.clone()).content(user).await?;
+            let _: Option<UserWithPassword> =
+                state.sdb.update(user.id.clone()).content(user).await?;
         }
         // TODO:  Validate new password meets strength
         // TODO:    - Not in common password dictionary
@@ -460,4 +461,211 @@ pub async fn delete_user(
     }
 
     return Ok((StatusCode::OK, "User Deleted".to_string()));
+}
+
+#[cfg(test)]
+mod modify_user_tests {
+    use std::sync::Mutex;
+
+    use axum::{
+        body::Body,
+        http::{
+            Request, StatusCode,
+            header::{AUTHORIZATION, CONTENT_TYPE},
+        },
+    };
+    use http_body_util::BodyExt;
+    use once_cell::sync::Lazy;
+    use serde_json::json;
+    use tower::ServiceExt;
+
+    use crate::{
+        app,
+        consts::auth_const::{
+            AUTH_PASSWORD_TABLE, EMAIL_CHANGE_TOKEN_TABLE, EMAIL_VERIFICATION_TABLE,
+            PASSWORD_RESET_TOKEN_TABLE, USER_TABLE,
+        },
+        models::{
+            user::User,
+            verification::{EmailChangeToken, EmailVerification},
+        },
+        routes::auth_route::user::SignInFormResponse,
+        state::AppState,
+    };
+
+    const SIGN_UP_URI: &str = "/auth/signup";
+    const SIGN_IN_URI: &str = "/auth/signin";
+    const DELETE_IN_URI: &str = "/auth/user";
+    const RESEND_EMAIL_VERIFICATION_URI: &str = "/auth/email/resend-verification";
+    const REQUEST_EMAIL_CHANGE_URI: &str = "/auth/email/change-request";
+    const PASSWORD_RESET_URI: &str = "/auth/password/reset";
+
+    static EMAIL_VERIFY_URI: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
+    static EMAIL_CHANGE_CONFIRM_URI: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
+    static PASSWORD_REQUEST_URI: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None)); // * password/reset-request
+    static PASSWORD_REQUEST_VALIDATE_URI: Lazy<Mutex<Option<String>>> =
+        Lazy::new(|| Mutex::new(None)); // * password/validate-token
+
+    const FORM_DATA_SIGNUP: &str =
+        "email=alana5%40gmail.com&username=allana3&password=Allana%24n09878";
+    const FORM_DATA_SIGNIN: &str = "email=alana5%40gmail.com&password=Allana%24n09878";
+
+    static JWT_TOKEN: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
+
+    #[tokio::test]
+    async fn test_full_auth_flow() {
+        clear_data().await;
+        //test_sign_up().await;
+        //test_sign_in().await;
+        //test_resend_email_verification().await;
+        // test_email_verify().await;
+        // test_request_email_change().await;
+        // test_confirm_email_change().await;
+        //test_delete_user().await;
+    }
+
+    async fn test_sign_up() {
+        let state = AppState::init().await.unwrap();
+        let app = app(state);
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(SIGN_UP_URI)
+                    .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(FORM_DATA_SIGNUP))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    async fn test_sign_in() {
+        let state = AppState::init().await.unwrap();
+        let app = app(state);
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(SIGN_IN_URI)
+                    .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(FORM_DATA_SIGNIN))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let body: SignInFormResponse = serde_json::from_slice(&body_bytes).unwrap();
+        *JWT_TOKEN.lock().unwrap() = Some(format!("Bearer {}", body.access_token));
+        assert_eq!(body.token_type, "Bearer");
+    }
+
+    async fn test_resend_email_verification() {
+        let state = AppState::init().await.unwrap();
+        let app = app(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(RESEND_EMAIL_VERIFICATION_URI)
+                    .header(AUTHORIZATION, JWT_TOKEN.lock().unwrap().clone().unwrap())
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({"email":"alana5@gmail.com"})).unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // let body: serde_json::Value =
+        //     serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+        //         .unwrap();
+        // assert_eq!(body, serde_json::json!("hello"));
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    async fn test_request_email_change() {
+        let state = AppState::init().await.unwrap();
+        let app = app(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(REQUEST_EMAIL_CHANGE_URI)
+                    .header(AUTHORIZATION, JWT_TOKEN.lock().unwrap().clone().unwrap())
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({"new_email":"alana92@gmail.com"})).unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let v: Vec<EmailChangeToken> = state
+            .sdb
+            .query("SELECT * FROM type::table($table) WHERE email = $email;")
+            .bind(("table", EMAIL_CHANGE_TOKEN_TABLE))
+            .bind(("email", "alana92@gmail.com"))
+            .await
+            .unwrap()
+            .take(0)
+            .unwrap();
+
+        let verification_token = v.first().unwrap().token.clone();
+        *EMAIL_CHANGE_CONFIRM_URI.lock().unwrap() = Some(format!(
+            "/auth/email/change-confirm?token={}",
+            verification_token
+        ));
+    }
+
+    async fn test_delete_user() {
+        let state = AppState::init().await.unwrap();
+        let app = app(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(DELETE_IN_URI)
+                    .header(AUTHORIZATION, JWT_TOKEN.lock().unwrap().clone().unwrap())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+    async fn clear_data() {
+        #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+        pub struct Record {
+            pub id: surrealdb::RecordId,
+        }
+        let tables = [
+            USER_TABLE,
+            AUTH_PASSWORD_TABLE,
+            EMAIL_VERIFICATION_TABLE,
+            EMAIL_CHANGE_TOKEN_TABLE,
+            PASSWORD_RESET_TOKEN_TABLE,
+        ];
+        let state = AppState::init().await.unwrap();
+        for table in tables {
+            let _: Vec<Record> = state.sdb.delete(table).await.unwrap();
+        }
+    }
 }

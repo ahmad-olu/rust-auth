@@ -48,7 +48,7 @@ pub async fn resend_email_verification(
 ) -> Result<(StatusCode, String)> {
     let get_user: Vec<User> = state
         .sdb
-        .query("SELECT * FROM type::table($table) WHERE email = $email AND id = $id;")
+        .query("SELECT * FROM type::table($table) WHERE email = $email AND id = $id AND deleted_at == None;")
         .bind(("table", USER_TABLE))
         .bind(("email", input.email.clone()))
         .bind(("id", user_id))
@@ -62,7 +62,7 @@ pub async fn resend_email_verification(
     let user_id = get_user.first().unwrap().id.clone();
     let check_token: Vec<EmailVerification> = state
         .sdb
-        .query("SELECT * FROM type::table($table) WHERE user_id = $user_id AND expires_at > time::now();") // not already expired
+        .query("SELECT * FROM type::table($table) WHERE user_id = $user_id AND expires_at > time::now() AND user_id.deleted_at == None;") // not already expired
         .bind(("table", EMAIL_VERIFICATION_TABLE))
         .bind(("user_id", user_id.clone()))
         .await?
@@ -104,7 +104,7 @@ pub async fn verify_email(
 
         let check_token: Vec<EmailVerification> = state
         .sdb
-        .query("SELECT * FROM type::table($table) WHERE token = $e_token AND expires_at < time::now();")
+        .query("SELECT * FROM type::table($table) WHERE token = $e_token AND expires_at < time::now() AND user_id.deleted_at == None;")
         .bind(("table", EMAIL_VERIFICATION_TABLE))
         .bind(("e_token", token))
         .await?
@@ -117,7 +117,7 @@ pub async fn verify_email(
             let get_user: Vec<User> = state
         .sdb
         .query(
-            "SELECT * FROM type::table($table) WHERE id = $id AND auth_provider = $provider AND email_verified != true",
+            "SELECT * FROM type::table($table) WHERE id = $id AND auth_provider = $provider AND email_verified != true AND deleted_at == None;",
         )
         .bind(("table", USER_TABLE))
         .bind(("id", user_id))
@@ -156,7 +156,7 @@ pub async fn request_email_change(
 
     let check_user: Vec<User> = state
         .sdb
-        .query("SELECT * FROM type::table($table) WHERE email = $email;")
+        .query("SELECT * FROM type::table($table) WHERE email = $email AND deleted_at == None;")
         .bind(("table", USER_TABLE))
         .bind(("email", input.new_email.clone()))
         .await?
@@ -167,7 +167,7 @@ pub async fn request_email_change(
     }
     let _: Vec<EmailChangeToken> = state
         .sdb
-        .query("DELETE type::table($table) WHERE email = $email;") // not already expired
+        .query("DELETE type::table($table) WHERE email = $email AND user_id.deleted_at == None;") // not already expired
         .bind(("table", EMAIL_CHANGE_TOKEN_TABLE))
         .bind(("email", input.new_email.clone()))
         .await?
@@ -200,7 +200,7 @@ pub async fn confirm_email_change(
 
         let check_token: Vec<EmailChangeToken> = state
         .sdb
-        .query("SELECT * FROM type::table($table) WHERE token = $e_token AND expires_at < time::now();") // not already expired
+        .query("SELECT * FROM type::table($table) WHERE token = $e_token AND expires_at < time::now() AND user_id.deleted_at == None;") // not already expired
         .bind(("table", EMAIL_CHANGE_TOKEN_TABLE))
         .bind(("e_token", token))
         .await?
@@ -214,7 +214,7 @@ pub async fn confirm_email_change(
             let get_user: Vec<User> = state
         .sdb
         .query(
-            "SELECT * FROM type::table($table) WHERE id = $id AND auth_provider = $provider AND email_verified != true",
+            "SELECT * FROM type::table($table) WHERE id = $id AND auth_provider = $provider AND email_verified != true AND deleted_at == None;",
         )
         .bind(("table", USER_TABLE))
         .bind(("id", user_id))
@@ -255,7 +255,7 @@ pub async fn request_forgot_password(
         let start = std::time::Instant::now();
         let user: Vec<User> = state
             .sdb
-            .query("SELECT * FROM type::table($table) WHERE email = $email;")
+            .query("SELECT * FROM type::table($table) WHERE email = $email AND deleted_at == None;")
             .bind(("table", USER_TABLE))
             .bind(("email", email))
             .await?
@@ -277,7 +277,7 @@ pub async fn request_forgot_password(
         let check_token: Vec<EmailVerification> = state
         .sdb
         .query(
-            "SELECT * FROM type::table($table) WHERE email = $email AND expires_at > time::now();",
+            "SELECT * FROM type::table($table) WHERE email = $email AND expires_at > time::now() AND user_id.deleted_at == None;",
         ) // not already expired
         .bind(("table", PASSWORD_RESET_TOKEN_TABLE))
         .bind(("email", input.email.clone()))
@@ -336,7 +336,7 @@ pub async fn forgotten_password_token_validation(
 
         let check_token: Vec<EmailChangeToken> = state
         .sdb
-        .query("SELECT * FROM type::table($table) WHERE token = $p_token AND expires_at < time::now();") // not already expired
+        .query("SELECT * FROM type::table($table) WHERE token = $p_token AND expires_at < time::now() AND user_id.deleted_at == None;") // not already expired
         .bind(("table", PASSWORD_RESET_TOKEN_TABLE))
         .bind(("p_token", token))
         .await?
@@ -350,7 +350,7 @@ pub async fn forgotten_password_token_validation(
             let get_user: Vec<UserWithPassword> = state
         .sdb
         .query(
-            "SELECT * FROM type::table($table) WHERE user_id = $user_id AND user_id.auth_provider = $provider AND user_id.email_verified = true",
+            "SELECT * FROM type::table($table) WHERE user_id = $user_id AND user_id.auth_provider = $provider AND user_id.email_verified = true AND user_id.deleted_at == None;",
         )
         .bind(("table", AUTH_PASSWORD_TABLE))
         .bind(("user_id", user_id))
@@ -444,7 +444,7 @@ pub async fn delete_user(
 ) -> Result<(StatusCode, String)> {
     let get_user: Vec<User> = state
         .sdb
-        .query("SELECT * FROM type::table($table) WHERE id = $id;")
+        .query("SELECT * FROM type::table($table) WHERE id = $id AND deleted_at != None;")
         .bind(("table", USER_TABLE))
         .bind(("id", user_id))
         .await?

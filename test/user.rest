@@ -1,7 +1,5 @@
 @host = http://127.0.0.1:3587
-@bearer_token = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6InVzZXJzOmpqa3Fmd2x0ZzBtbGludXFrN3ExIiwiZXhwIjoxNzU0MDU5NzY2LCJpYXQiOjE3NTQwNTk1ODYsImlzcyI6Ik1hbmdvZSJ9.lID4LI7OiK6NQARsWGIDKACYzAjM5gR-plT0c8erYtA
-
-
+@bearer_token = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6InVzZXJzOmlhaWUyZGtjM2VjYTFiNGFtd3J3IiwiZXhwIjoxNzU0MDY1NDY5LCJpYXQiOjE3NTQwNjUyODksImlzcyI6Ik1hbmdvZSJ9.ID8Ltc1tVZ7aMDXLV_PnEMX8Yu7_z6AupSFe8RdiUc0
 
 ### ! sign up
 POST {{host}}/auth/signup
@@ -15,6 +13,11 @@ POST {{host}}/auth/signin
 Content-Type: application/x-www-form-urlencoded
 
 email=test%40example.com&password=Supersecure%40123
+
+# > {% 
+#   const json = JSON.parse(response.body);
+#   console.log(json.access_token);
+# %}
 
 
 ### ! resend email verification

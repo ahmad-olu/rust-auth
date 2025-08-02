@@ -1,5 +1,7 @@
+use serde::{Deserialize, Serialize};
 use surrealdb::RecordId;
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub enum InvitationStatus {
     Pending,
     Accepted,
@@ -8,9 +10,11 @@ pub enum InvitationStatus {
     Cancelled,
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Invitation {
     pub id: RecordId,
-    pub team_id: RecordId,
+    pub team_id: Option<RecordId>,
+    pub organization_id: Option<RecordId>,
     pub email: String, // ! & (len = 255)
     pub role: String,  // ! (default member) & (len = 50)
 

@@ -133,7 +133,7 @@ pub async fn sign_in(
         let user_id = user.user_id.to_string();
         match validate {
             true => {
-                let exp = (Utc::now() + Duration::minutes(3)).timestamp() as usize; // ? TODO: Change this to days instead of minutes
+                let exp = (Utc::now() + Duration::minutes(60)).timestamp() as usize; // ? TODO: Change this to days instead of minutes
                 let iat = Utc::now().timestamp() as usize;
                 let claims = Claims {
                     id: user_id,

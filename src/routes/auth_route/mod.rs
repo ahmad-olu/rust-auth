@@ -5,7 +5,7 @@ use tower_governor::{
 
 use axum::{
     Router, middleware,
-    routing::{delete, get, post},
+    routing::{delete, get, patch, post},
 };
 
 use crate::{
@@ -16,6 +16,13 @@ use crate::{
                 confirm_email_change, delete_user, forgotten_password_token_validation,
                 request_email_change, request_forgot_password, resend_email_verification,
                 reset_password, verify_email,
+            },
+            organization::{
+                bulk_member_import, create_organization, create_organization_memberships,
+                data_export, delete_organization, delete_organization_memberships,
+                leave_organization, organization_migration, organization_switch, read_organization,
+                read_organization_memberships, read_organizations, update_organization,
+                update_organization_memberships,
             },
             user::{sign_in, sign_up},
         },
@@ -34,7 +41,10 @@ pub mod user;
 pub fn auth_router(config: AppState) -> Router<AppState> {
     // ? rate limiter for resend email verification
 
-    Router::new().merge(user(config.clone())).with_state(config)
+    Router::new()
+        .merge(user(config.clone()))
+        .nest("/organizations", organization(config.clone()))
+        .with_state(config)
 }
 
 fn user(config: AppState) -> Router<AppState> {
@@ -94,6 +104,41 @@ fn user(config: AppState) -> Router<AppState> {
     Router::new()
         .merge(unprotected(config.clone()))
         .merge(protected(config.clone()))
+        .with_state(config)
+}
+
+fn organization(config: AppState) -> Router<AppState> {
+    Router::new()
+        // ! org
+        .route("/", post(create_organization))
+        .route("/{org_id}", get(read_organization))
+        .route("/", get(read_organizations))
+        .route("/{org_id}", patch(update_organization))
+        .route("/{org_id}", delete(delete_organization))
+        // ! org membership
+        .route(
+            "/{org_id}/memberships",
+            post(create_organization_memberships),
+        )
+        .route("/{org_id}/memberships", get(read_organization_memberships))
+        .route(
+            "/{org_id}/memberships/{member_id}",
+            patch(update_organization_memberships),
+        )
+        .route(
+            "/{org_id}/memberships/{member_id}",
+            delete(delete_organization_memberships),
+        )
+        .route("/{org_id}/leave", post(leave_organization))
+        // ! other actions
+        .route("/{org_id}/switch", post(organization_switch))
+        .route(
+            "/{org_id}/memberships/bulk-import",
+            post(bulk_member_import),
+        )
+        .route("/{org_id}/data-export", get(data_export))
+        .route("/{org_id}/migrate", post(organization_migration))
+        .layer(middleware::from_fn(auth_jwt_middleware))
         .with_state(config)
 }
 

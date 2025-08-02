@@ -6,10 +6,15 @@ use surrealdb::Error as SError;
 use thiserror::Error;
 use tracing::error;
 
+use crate::models::permission::Permission;
+
 pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Internal Server Error")]
+    InternalServerError,
+
     #[error("Argon 2 Error: {0}")]
     Argon2Error(#[from] ArError),
 
@@ -57,6 +62,37 @@ pub enum Error {
     InvalidScheme,
     #[error("Token expired")]
     TokenExpired,
+
+    // ! org
+    #[error("Org name taken")]
+    OrgNameTaken,
+    #[error("Org creation limit")]
+    OrgCreationLimitReached,
+
+    #[error("Access denied: missing permission {0:?}")]
+    AccessDenied(Permission),
+
+    #[error("User not found in organization")]
+    UserNotInOrganization,
+
+    #[error("User not found in team")]
+    UserNotInTeam,
+
+    #[error("Organization not found")]
+    OrganizationNotFound,
+
+    #[error("Team not found")]
+    TeamNotFound,
+
+    #[error("Role not found")]
+    RoleNotFound,
+
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
+    // #[error("Database error: {0}")]
+    // DatabaseError(String),
+    #[error("Custom: {0}")]
+    Custom(String),
 }
 
 impl IntoResponse for Error {
@@ -79,6 +115,7 @@ impl IntoResponse for Error {
             }
             Error::SurrealError(error) => {
                 error!("Surreal  Error:{:#?}", error);
+                //  print!("=======> Surreal  Error:{:#?}", error);
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Internal Error".to_string(),
@@ -138,6 +175,40 @@ impl IntoResponse for Error {
                 "Invalid authorization scheme".to_string(),
             ),
             Error::TokenExpired => (StatusCode::UNAUTHORIZED, "Token expired".to_string()),
+            Error::OrgNameTaken => (
+                StatusCode::CONFLICT,
+                "Organization name UnAvailable, try another.".to_string(),
+            ),
+            Error::OrgCreationLimitReached => (
+                StatusCode::UNAUTHORIZED,
+                "You have reached you Organization creation limit... Pele".to_string(),
+            ),
+            Error::InternalServerError => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal Error".to_string(),
+            ),
+            Error::AccessDenied(permission) => (
+                StatusCode::UNAUTHORIZED,
+                format!("Access denied: missing permission {0:?}", permission),
+            ),
+            Error::UserNotInOrganization => (
+                StatusCode::UNAUTHORIZED,
+                format!("User not found in organization"),
+            ),
+            Error::UserNotInTeam => (StatusCode::UNAUTHORIZED, format!("User not found in team")),
+            Error::OrganizationNotFound => {
+                (StatusCode::UNAUTHORIZED, format!("Organization not found"))
+            }
+            Error::TeamNotFound => (StatusCode::UNAUTHORIZED, format!("Team not found")),
+            Error::RoleNotFound => (StatusCode::UNAUTHORIZED, format!("Role not found")),
+            Error::InvalidOperation(op) => (
+                StatusCode::UNAUTHORIZED,
+                format!("Invalid operation: {0}", op),
+            ),
+            Error::Custom(val) => {
+                //  println!("custom ==> {}", val);
+                (StatusCode::BAD_REQUEST, format!("{0}", val))
+            }
         };
         (status, message).into_response()
     }

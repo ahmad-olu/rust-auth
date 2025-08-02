@@ -1,5 +1,7 @@
 pub mod email_verification;
+pub mod get_record_id;
 pub mod jwt;
+pub mod permission_context;
 pub mod pwd;
 pub mod slug;
 pub mod time;

@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
 use surrealdb::RecordId;
 
-pub struct Invitation {
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct Log {
     pub id: RecordId,
     pub organization_id: Option<RecordId>,
     pub user_id: Option<RecordId>,

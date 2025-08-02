@@ -1,5 +1,7 @@
+use serde::{Deserialize, Serialize};
 use surrealdb::RecordId;
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct PasswordResetTokens {
     pub id: RecordId,
     pub user_id: RecordId,

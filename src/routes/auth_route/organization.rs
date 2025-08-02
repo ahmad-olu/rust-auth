@@ -673,10 +673,10 @@ pub async fn delete_organization_memberships(
 
     let mut member = state
         .sdb
-        .query("SELECT * FROM type::table($table) WHERE organization_id = $organization_id AND user_id = $user_id AND deleted_at == None;")
+        .query("SELECT * FROM type::table($table) WHERE organization_id = $organization_id AND id = $id AND deleted_at == None;")
         .bind(("table", ORGANIZATION_MEMBERSHIP_TABLE))
         .bind(("organization_id", org_id.clone()))
-        .bind(("user_id", member_id.clone()))
+        .bind(("id", member_id.clone()))
         .await?
         .take::<Vec<OrganizationMembership>>(0)?
         .first().ok_or(Error::InternalServerError)?.clone();
@@ -905,6 +905,8 @@ mod user_tests {
         test_member_view_org_id_with_permission().await;
         test_member_read_user_organizations().await;
         test_owner_update_organization_membership().await;
+        test_member_update_organization_membership().await;
+        test_owner_delete_organization_membership().await;
     }
 
     async fn test_sign_up_admin() {
@@ -1335,6 +1337,61 @@ mod user_tests {
 
         assert_eq!(parts.status, StatusCode::CREATED);
     }
+
+    async fn test_member_update_organization_membership() {
+        let state = AppState::init().await.unwrap();
+        let app = app(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri(format!(
+                        "/auth/organizations/{}/memberships/{}",
+                        ORG_ID.lock().unwrap().clone().unwrap(),
+                        MEMBER_ID.lock().unwrap().clone().unwrap(),
+                    ))
+                    .header(AUTHORIZATION, JWT_TOKEN_2.lock().unwrap().clone().unwrap())
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({"custom_permissions":["TeamsJoin"]})).unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let (parts, _body) = response.into_parts();
+
+        assert_eq!(parts.status, StatusCode::UNAUTHORIZED);
+    }
+
+    async fn test_owner_delete_organization_membership() {
+        let state = AppState::init().await.unwrap();
+        let app = app(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!(
+                        "/auth/organizations/{}/memberships/{}",
+                        ORG_ID.lock().unwrap().clone().unwrap(),
+                        MEMBER_ID.lock().unwrap().clone().unwrap(),
+                    ))
+                    .header(AUTHORIZATION, JWT_TOKEN_1.lock().unwrap().clone().unwrap())
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let (parts, _body) = response.into_parts();
+
+        assert_eq!(parts.status, StatusCode::OK);
+    }
+
     async fn clear_data() {
         #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
         pub struct Record {

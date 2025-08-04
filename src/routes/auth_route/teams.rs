@@ -6,10 +6,11 @@ use axum::{
 use sha2::digest::consts::P22;
 
 use crate::{
-    consts::auth_const::{TEAM_MEMBERSHIP_TABLE, TEAM_TABLE},
+    consts::auth_const::{ORGANIZATION_MEMBERSHIP_TABLE, TEAM_MEMBERSHIP_TABLE, TEAM_TABLE},
     errors::{Error, Result},
     middleware::UserId,
     models::{
+        organization::OrganizationMembership,
         permission::{Permission, PermissionChecker},
         role::PRoles,
         team::{CreateTeam, CreateTeamMembership, Team, TeamMembership, TeamMembershipStatus},
@@ -53,7 +54,7 @@ pub async fn create_team(
         let team_id = get_record_id_from_string(parent_team);
         let _ = state
             .sdb
-            .select::<Option<Team>>(team_id)
+            .select::<Option<Team>>(team_id.clone())
             .await?
             .ok_or(Error::InternalServerError)?;
 
@@ -131,14 +132,77 @@ pub async fn create_team(
 pub async fn join_team(
     State(state): State<AppState>,
     Extension(UserId(user_id)): Extension<UserId>,
-) {
-    // TODO:     Authenticate user
-    // TODO: Check team visibility and join permissions
-    // TODO: Validate user is organization member
-    // TODO: Check if already team member
-    // TODO: Create team membership
+    Path((org_id, team_id)): Path<(String, String)>,
+) -> Result<(StatusCode, TeamMembership)> {
+    let org_id = get_record_id_from_string(org_id);
+    let team_id = get_record_id_from_string(team_id);
+
+    let team= state
+        .sdb
+        .query("SELECT * FROM type::table($table) WHERE team_id = $team_id AND user_id = $user_id AND organization_id = $organization_id AND deleted_at == None;")
+        .bind(("table", TEAM_MEMBERSHIP_TABLE))
+        .bind(("team_id", team_id.clone()))
+        .bind(("user_id", user_id.clone()))
+        .bind(("organization_id", org_id.clone()))
+        .await?
+        .take::<Vec<TeamMembership>>(0)?; // already a member
+
+    if team.first().is_some() {
+        return Err(Error::InternalServerError);
+    }
+
+    let _ = state
+        .sdb
+        .query("SELECT * FROM type::table($table) WHERE id = $id AND organization_id = $organization_id AND is_private = true AND deleted_at == None;")
+        .bind(("table", TEAM_TABLE))
+        .bind(("id", team_id.clone()))
+        .bind(("organization_id", org_id.clone()))
+        .await?
+        .take::<Vec<Team>>(0)?.first().ok_or(Error::InternalServerError)?.clone(); //team is public
+
+    let _= state
+        .sdb
+        .query("SELECT * FROM type::table($table) WHERE team_id = $team_id AND user_id = $user_id AND organization_id = $organization_id AND deleted_at == None;")
+        .bind(("table", TEAM_MEMBERSHIP_TABLE))
+        .bind(("team_id", team_id.clone()))
+        .bind(("user_id", user_id.clone()))
+        .bind(("organization_id", org_id.clone()))
+        .await?
+        .take::<Vec<TeamMembership>>(0)?
+        .first()
+        .ok_or(Error::InternalServerError)?; // already a member
+    let _= state
+        .sdb
+        .query("SELECT * FROM type::table($table) WHERE user_id = $user_id AND organization_id = $organization_id AND deleted_at == None;")
+        .bind(("table", ORGANIZATION_MEMBERSHIP_TABLE))
+        .bind(("user_id", user_id.clone()))
+        .bind(("organization_id", org_id.clone()))
+        .await?
+        .take::<Vec<OrganizationMembership>>(0)?.first().ok_or(Error::InternalServerError)?; // member of org
+    let team_data = CreateTeamMembership {
+        team_id,
+        organization_id: org_id,
+        user_id,
+        role: format!("{:?}", PRoles::Viewer),
+        status: TeamMembershipStatus::Active,
+        permissions: None,
+        metadata: None,
+        joined_at: time_now(),
+        added_by: None,
+        created_at: time_now(),
+        updated_at: None,
+        deleted_at: None,
+    };
+    let member = state
+        .sdb
+        .create::<Option<TeamMembership>>(TEAM_MEMBERSHIP_TABLE)
+        .content(team_data)
+        .await?
+        .ok_or(Error::InternalServerError)?;
     // TODO: Log team join event
     // TODO: Return membership data
+    //
+    Ok((StatusCode::CREATED, member))
 }
 
 pub async fn read_team(

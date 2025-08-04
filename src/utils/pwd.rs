@@ -1,39 +1,101 @@
-use argon2::{
-    Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
-    password_hash::{SaltString, rand_core::OsRng},
+use crate::{
+    errors::Result,
+    models::user::{DEFAULT_PASSWORD_VERSION, PasswordVersion},
 };
 
-use crate::errors::{Error, Result};
+// #[derive(Debug)]
+// pub enum PwdVersionStatus {
+//     Ok,
+//     Outdated,
+// }
 
 pub fn hash(password: &[u8]) -> Result<String> {
-    let salt = SaltString::generate(&mut OsRng);
-    let argon2 = Argon2::default();
-    Ok(argon2.hash_password(password, &salt)?.to_string())
-}
-pub fn validate(password: &[u8], hash: &str) -> Result<bool> {
-    let parsed_hash = PasswordHash::new(hash)?;
-    let argon2 = Argon2::default();
-
-    match argon2.verify_password(password, &parsed_hash) {
-        Ok(()) => Ok(true),
-        Err(argon2::password_hash::Error::Password) => Ok(false),
-        Err(e) => Err(Error::Argon2Error(e)),
+    match DEFAULT_PASSWORD_VERSION {
+        PasswordVersion::V1 => Ok(argon2_pwd::hash(password)?),
+        //_ => Err(Error::InternalServerError),
     }
 }
+pub async fn validate<F, Fut>(
+    version: &PasswordVersion,
+    password: &[u8],
+    hash: &str,
+    f: F,
+) -> Result<bool>
+where
+    F: Fn(String) -> Fut,
+    Fut: Future<Output = Result<()>>,
+{
+    if version == &DEFAULT_PASSWORD_VERSION {
+        match DEFAULT_PASSWORD_VERSION {
+            PasswordVersion::V1 => return Ok(argon2_pwd::validate(password, hash)?),
+            //_ => Err(Error::InternalServerError),
+        }
+    }
 
-pub fn validate_strict(password: &[u8], hash: &str) -> Result<()> {
-    let parsed_hash = PasswordHash::new(hash)?;
-    let argon2 = Argon2::default();
-    let res = argon2.verify_password(password, &parsed_hash)?;
-    Ok(res)
+    let valid = match version {
+        PasswordVersion::V1 => argon2_pwd::validate(password, hash)?,
+    };
+
+    if valid {
+        let new_hash = match DEFAULT_PASSWORD_VERSION {
+            PasswordVersion::V1 => argon2_pwd::hash(password)?,
+        };
+
+        f(new_hash).await?;
+    }
+
+    Ok(valid)
+}
+
+fn validate_strict(_password: &[u8], _hash: &str) -> Result<()> {
+    todo!()
+}
+
+mod argon2_pwd {
+    use argon2::{
+        Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
+        password_hash::{SaltString, rand_core::OsRng},
+    };
+
+    use crate::{
+        errors::{Error, Result},
+        models::user::PasswordVersion,
+    };
+
+    pub fn hash(password: &[u8]) -> Result<String> {
+        let salt = SaltString::generate(&mut OsRng);
+        let argon2 = Argon2::default();
+        Ok(argon2.hash_password(password, &salt)?.to_string())
+    }
+
+    pub fn validate(password: &[u8], hash: &str) -> Result<bool> {
+        let parsed_hash = PasswordHash::new(hash)?;
+        let argon2 = Argon2::default();
+
+        match argon2.verify_password(password, &parsed_hash) {
+            Ok(()) => Ok(true),
+            Err(argon2::password_hash::Error::Password) => Ok(false),
+            Err(e) => Err(Error::Argon2Error(e)),
+        }
+    }
+
+    pub fn validate_strict(password: &[u8], hash: &str) -> Result<()> {
+        let parsed_hash = PasswordHash::new(hash)?;
+        let argon2 = Argon2::default();
+        let res = argon2.verify_password(password, &parsed_hash)?;
+        Ok(res)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::{
+        models::user::PasswordVersion,
+        utils::pwd::{hash, validate, validate_strict},
+    };
 
-    #[test]
-    fn test_hash_and_validate() {
+    #[tokio::test]
+    async fn test_hash_and_validate() {
         let password = b"my_secure_password";
 
         // Hash the password
@@ -41,11 +103,26 @@ mod tests {
         println!("Hashed password: {}", hashed);
 
         // Validate with correct password
-        assert!(validate(password, &hashed).expect("Validation failed"));
+        assert!(
+            validate(&PasswordVersion::V1, password, &hashed, |_| async move {
+                Ok(())
+            })
+            .await
+            .expect("Validation failed")
+        );
 
         // Validate with incorrect password
         let wrong_password = b"wrong_password";
-        assert!(!validate(wrong_password, &hashed).expect("Validation failed"));
+        assert!(
+            validate(
+                &PasswordVersion::V1,
+                wrong_password,
+                &hashed,
+                |_| async move { Ok(()) }
+            )
+            .await
+            .expect("Validation failed")
+        );
     }
 
     #[test]

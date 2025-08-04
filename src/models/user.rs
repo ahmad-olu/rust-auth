@@ -45,11 +45,19 @@ pub enum UserStatus {
     InActive,
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub enum PasswordVersion {
+    V1,
+}
+
+pub const DEFAULT_PASSWORD_VERSION: PasswordVersion = PasswordVersion::V1;
+
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct UserWithPassword {
     pub id: RecordId,
     pub user_id: RecordId,
     pub password_hash: String, // ! & (len = 255)
+    pub version: PasswordVersion,
     pub created_at: String,
     pub updated_at: Option<String>,
 }
@@ -58,6 +66,7 @@ pub struct UserWithPassword {
 pub struct UserReqWithPassword {
     pub user_id: RecordId,
     pub password_hash: String, // ! & (len = 255)
+    pub version: PasswordVersion,
     pub created_at: String,
     pub updated_at: Option<String>,
 }

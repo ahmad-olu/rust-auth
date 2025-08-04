@@ -6,7 +6,8 @@ use crate::{
     consts::auth_const::{AUTH_PASSWORD_TABLE, USER_TABLE},
     errors::{Error, Result},
     models::user::{
-        AuthProvider, User, UserReqForSignUp, UserReqWithPassword, UserStatus, UserWithPassword,
+        AuthProvider, PasswordVersion, User, UserReqForSignUp, UserReqWithPassword, UserStatus,
+        UserWithPassword,
     },
     state::AppState,
     utils::{
@@ -64,6 +65,7 @@ pub async fn sign_up(
         let auth_password = UserReqWithPassword {
             user_id: user.id,
             password_hash,
+            version: PasswordVersion::V1,
             created_at: time_now(),
             updated_at: None,
         };
@@ -129,7 +131,27 @@ pub async fn sign_in(
     let get_user = get_user.get(0);
     if let Some(user) = get_user {
         let password_hash = &user.password_hash;
-        let validate = validate(input.password.clone().as_bytes(), password_hash)?;
+        let password_version = &user.version;
+
+        let validate = validate(
+            password_version,
+            input.password.clone().as_bytes(),
+            password_hash,
+            move |new_hash| {
+                let sdb = state.sdb.clone();
+                async move {
+                    let mut auth_password = user.clone();
+                    let auth_pass_id = auth_password.id.clone();
+                    auth_password.updated_at = Some(time_now());
+                    auth_password.password_hash = new_hash;
+
+                    let _: Option<UserWithPassword> =
+                        sdb.update(auth_pass_id).content(auth_password).await?;
+                    Ok(())
+                }
+            },
+        )
+        .await?;
         let user_id = user.user_id.to_string();
         match validate {
             true => {

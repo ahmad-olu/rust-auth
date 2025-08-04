@@ -93,6 +93,8 @@ pub enum Error {
     // DatabaseError(String),
     #[error("Custom: {0}")]
     Custom(String),
+    #[error("Team name taken")]
+    TeamNameTaken,
 }
 
 impl IntoResponse for Error {
@@ -209,6 +211,10 @@ impl IntoResponse for Error {
                 //  println!("custom ==> {}", val);
                 (StatusCode::BAD_REQUEST, format!("{0}", val))
             }
+            Error::TeamNameTaken => (
+                StatusCode::CONFLICT,
+                "Team name UnAvailable, try another.".to_string(),
+            ),
         };
         (status, message).into_response()
     }

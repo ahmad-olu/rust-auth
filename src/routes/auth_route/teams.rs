@@ -342,7 +342,8 @@ pub async fn delete_team(
 pub async fn add_team_memberships(
     State(state): State<AppState>,
     Extension(UserId(user_id)): Extension<UserId>,
-) {
+    Path((org_id, team_id)): Path<(String, String)>
+) -> Result<(StatusCode, Json<TeamMembership>)>{
 
     // * When adding a user to a team.  Add user to a team, optionally with added_by.
 
@@ -360,7 +361,8 @@ pub async fn add_team_memberships(
 pub async fn read_team_memberships(
     State(state): State<AppState>,
     Extension(UserId(user_id)): Extension<UserId>,
-) {
+    Path((org_id, team_id)): Path<(String, String)>
+) -> Result<(StatusCode, Json<Vec<TeamMembership>>)>{
     // * List members per team.
     //
     todo!()
@@ -369,7 +371,8 @@ pub async fn read_team_memberships(
 pub async fn update_team_memberships(
     State(state): State<AppState>,
     Extension(UserId(user_id)): Extension<UserId>,
-) {
+    Path((org_id, team_id, team_member_id)): Path<(String, String, String)>
+)-> Result<(StatusCode, Json<TeamMembership>)> {
     // * Promote or demote members. Change role or permissions within team.
 
     // TODO:     Authenticate user
@@ -385,7 +388,8 @@ pub async fn update_team_memberships(
 pub async fn remove_team_memberships(
     State(state): State<AppState>,
     Extension(UserId(user_id)): Extension<UserId>,
-) {
+    Path((org_id, team_id, team_member_id)): Path<(String, String, String)>
+)-> Result<(StatusCode, String)> {
     // * When someone leaves a team. Remove user from a team.
 
     // TODO:     Authenticate user

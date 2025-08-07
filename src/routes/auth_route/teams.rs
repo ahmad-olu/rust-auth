@@ -1,9 +1,12 @@
+use std::ops::DerefMut;
+
 use axum::{
     Extension, Json,
     extract::{Path, State},
     http::StatusCode,
 };
 use sha2::digest::consts::P22;
+use tower_http::follow_redirect::policy::PolicyExt;
 
 use crate::{
     consts::auth_const::{ORGANIZATION_MEMBERSHIP_TABLE, TEAM_MEMBERSHIP_TABLE, TEAM_TABLE},
@@ -208,37 +211,132 @@ pub async fn join_team(
 pub async fn read_team(
     State(state): State<AppState>,
     Extension(UserId(user_id)): Extension<UserId>,
-) {
+    State(org_id): State<String>,
+) -> Result<(StatusCode, Json<Vec<Team>>)> {
     // * List teams in an organization.(List teams within org or nested teams via parent_team_id.)
+
+    let org_id = get_record_id_from_string(org_id);
+    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
+        .await?
+        .has_permission(&Permission::TeamsRead);
+    if permission == false {
+        return Err(Error::AccessDenied(Permission::TeamsRead));
+    }
+
+    let team = state.sdb
+            .query("SELECT * FROM type::table($table) WHERE organization_id = $organization_id")
+            .bind(("table", TEAM_TABLE))
+            .bind(("organization_id", org_id)).await?
+        .take::<Vec<Team>>(0)?
+
+    Ok((StatusCode::OK, Json(team)))
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub struct UpdateTeamRequest {
+    pub name: Option<String>, // ! & (len = 255)
+    pub description: Option<String>,
+    pub is_private: Option<bool>,                    // ! (default false)
+    pub settings: Option<serde_json::Value>, // ! (default {})
+    pub metadata: Option<serde_json::Value>,
+}
+
+impl UpdateTeamRequest {
+    fn apply_to(&self, team: &mut Team) {
+        if let Some(name) = &self.name {
+            let slug = to_slug(&name);
+            team.name = name.clone();
+            team.slug = slug;
+        }
+        if let Some(description) = &self.description {
+            team.description = description.clone();
+        }
+        if let Some(is_private) = &self.is_private {
+            team.is_private = *is_private;
+        }
+        if let Some(settings) = &self.settings {
+            team.settings = Some(settings.clone());
+        }
+        if let Some(metadata) = &self.metadata {
+            team.metadata = Some(metadata.clone())
+        }
+    }
 }
 
 pub async fn update_team(
     State(state): State<AppState>,
     Extension(UserId(user_id)): Extension<UserId>,
-) {
+    Path((org_id, team_id)): Path<(String, String)>,
+    ValidatedJson(input): ValidatedJson<UpdateTeamRequest>
+)-> Result<(StatusCode, Json<Team>)> {
     // * Rename or reassign team manager.  Change name, privacy, settings.
 
-    // TODO:     Authenticate user
-    // TODO: Check user has team admin role or teams.update permission
-    // TODO: Validate new slug uniqueness if changed
-    // TODO: Update team record
+    let org_id = get_record_id_from_string(org_id);
+    let team_id = get_record_id_from_string(team_id);
+    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
+        .await?
+        .has_permission(&Permission::TeamsUpdate);
+    if permission == false {
+        return Err(Error::AccessDenied(Permission::TeamsUpdate));
+    }
+
+      let mut team = state.sdb.select::<Option<Team>>(team_id.clone()).await?.ok_or(Error::InternalServerError)?;
+    if let Some(name) = &input.name {
+    let slug = to_slug(&name);
+        if team.slug == slug {
+            return Err(Error::TeamNameTaken);
+        }
+      }
+    input.apply_to(&mut team);
+    let team = state.sdb.update::<Option<Team>>(team_id)
+        .content(team).
+        await?.ok_or(Error::InternalServerError)?;
+    
     // TODO: Log team update event
-    // TODO: Return updated team data
+
+    Ok((StatusCode::CREATED, Json(team)))
 }
 
 pub async fn delete_team(
     State(state): State<AppState>,
     Extension(UserId(user_id)): Extension<UserId>,
-) {
+    Path((org_id, team_id)): Path<(String, String)>
+)-> Result<(StatusCode, String)> {
     // * With care, especially if team is linked to critical data. (soft): Set deleted_at.
 
-    // TODO:    Authenticate user
-    // TODO:Check user has team admin role or teams.delete permission
+
+    let org_id = get_record_id_from_string(org_id);
+    let team_id = get_record_id_from_string(team_id);
+    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
+        .await?
+        .has_permission(&Permission::TeamsDelete);
+    if permission == false {
+        return Err(Error::AccessDenied(Permission::TeamsDelete));
+    }
+    let mut memberships = state.sdb
+    .query("SELECT * FROM type::table($table) WHERE team_id = $team_id AND organization_id = $organization_id;")
+    .bind(("table", TEAM_MEMBERSHIP_TABLE))
+    .bind(("organization_id", org_id.clone()))
+    .bind(("team_id", team_id.clone()))
+    .await?.take::<Vec<TeamMembership>>(0)?;
+    for member in memberships.iter_mut() {
+        member.deleted_at = Some(time_now());
+        member.updated_at = Some(time_now());
+        let _ = state.sdb.update::<Option<TeamMembership>>(member.id.clone())
+            .content(member.clone())
+            .await?;
+    }
+
+    let mut team = state.sdb.select::<Option<Team>>(team_id.clone()).await?.ok_or(Error::InternalServerError)?;
+    team.deleted_at = Some(time_now());
+    team.updated_at = Some(time_now());
+    let _ = state.sdb.update::<Option<Team>>(team_id).content(team).await?;
+    
     // TODO:Check for child teams (handle or prevent deletion)
-    // TODO:Remove all team memberships
-    // TODO:Soft delete team record
     // TODO:Log team deletion event
-    // TODO:Return success confirmation
+    
+    
+    Ok((StatusCode::OK, "Team deleted Successfully".to_string()))
 }
 
 pub async fn add_team_memberships(
@@ -255,6 +353,8 @@ pub async fn add_team_memberships(
     // TODO: Create team membership record
     // TODO: Log team membership creation event
     // TODO: Return membership data
+    //
+    todo!()
 }
 
 pub async fn read_team_memberships(
@@ -262,6 +362,8 @@ pub async fn read_team_memberships(
     Extension(UserId(user_id)): Extension<UserId>,
 ) {
     // * List members per team.
+    //
+    todo!()
 }
 
 pub async fn update_team_memberships(
@@ -276,6 +378,8 @@ pub async fn update_team_memberships(
     // TODO: Update team membership record
     // TODO: Log role change event
     // TODO: Return updated membership data
+    //
+    todo!()
 }
 
 pub async fn remove_team_memberships(
@@ -289,4 +393,6 @@ pub async fn remove_team_memberships(
     // TODO: Delete team membership record
     // TODO: Log member removal event
     // TODO: Return success confirmation
+
+    todo!()
 }

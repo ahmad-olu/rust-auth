@@ -74,6 +74,7 @@ pub struct TeamMembership {
     pub joined_at: String,
     pub added_by: RecordId,
     pub created_at: String,
+    pub updated_at: Option<String>,
     pub deleted_at: Option<String>,
 }
 

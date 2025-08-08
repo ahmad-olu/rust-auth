@@ -42,6 +42,48 @@ pub enum Permission {
     All,
 }
 
+pub trait TeamPermissionValidator {
+    fn validate_team_permissions(&self) -> Result<()>;
+}
+
+impl TeamPermissionValidator for HashSet<Permission> {
+    fn validate_team_permissions(&self) -> Result<()> {
+        for p in self {
+            match p {
+                Permission::TeamsCreate
+                | Permission::TeamsDelete
+                | Permission::TeamsJoin
+                | Permission::TeamsLeave
+                | Permission::TeamsRead
+                | Permission::TeamsUpdate => {}
+                _ => {
+                    return Err(Error::Custom(
+                        "you can only use team permission".to_string(),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+pub fn all_teams_permission() -> Option<HashSet<Permission>> {
+    let mut permissions = HashSet::new();
+    permissions.insert(Permission::TeamsCreate);
+    permissions.insert(Permission::TeamsDelete);
+    permissions.insert(Permission::TeamsJoin);
+    permissions.insert(Permission::TeamsLeave);
+    permissions.insert(Permission::TeamsRead);
+    permissions.insert(Permission::TeamsUpdate);
+    Some(permissions)
+}
+
+pub fn only_view_teams_permission() -> Option<HashSet<Permission>> {
+    let mut permissions = HashSet::new();
+    permissions.insert(Permission::TeamsRead);
+    Some(permissions)
+}
+
 #[derive(Debug, Clone)]
 pub struct PermissionContext {
     pub user: User,
@@ -55,7 +97,6 @@ pub struct PermissionContext {
 pub trait PermissionChecker {
     fn has_permission(&self, permission: &Permission) -> bool;
     fn has_any_permission(&self, permissions: &[Permission]) -> bool;
-    fn has_all_permissions(&self, permissions: &[Permission]) -> bool;
     fn can_access_organization(&self, org_id: &RecordId) -> bool;
     fn can_access_team(&self, team_id: &RecordId) -> bool;
     fn is_organization_owner(&self) -> bool;
@@ -84,15 +125,6 @@ impl PermissionChecker for PermissionContext {
         permissions
             .iter()
             .any(|p| self.effective_permissions.contains(p))
-    }
-
-    fn has_all_permissions(&self, permissions: &[Permission]) -> bool {
-        if self.effective_permissions.contains(&Permission::All) {
-            return true;
-        }
-        permissions
-            .iter()
-            .all(|p| self.effective_permissions.contains(p))
     }
 
     fn can_access_organization(&self, org_id: &RecordId) -> bool {

@@ -1,22 +1,26 @@
-use std::ops::DerefMut;
+use std::collections::HashSet;
 
 use axum::{
     Extension, Json,
     extract::{Path, State},
     http::StatusCode,
 };
-use sha2::digest::consts::P22;
-use tower_http::follow_redirect::policy::PolicyExt;
 
 use crate::{
-    consts::auth_const::{ORGANIZATION_MEMBERSHIP_TABLE, TEAM_MEMBERSHIP_TABLE, TEAM_TABLE},
+    consts::auth_const::{
+        ORGANIZATION_MEMBERSHIP_TABLE, TEAM_MEMBERSHIP_TABLE, TEAM_TABLE, USER_TABLE,
+    },
     errors::{Error, Result},
     middleware::UserId,
     models::{
         organization::OrganizationMembership,
-        permission::{Permission, PermissionChecker},
+        permission::{
+            self, Permission, PermissionChecker, TeamPermissionValidator, all_teams_permission,
+            only_view_teams_permission,
+        },
         role::PRoles,
         team::{CreateTeam, CreateTeamMembership, Team, TeamMembership, TeamMembershipStatus},
+        user::User,
     },
     state::AppState,
     utils::{
@@ -102,13 +106,13 @@ pub async fn create_team(
         .content(team_data)
         .await?;
     if let Some(team) = team.clone() {
+        let permissions = all_teams_permission();
         let membership_data = CreateTeamMembership {
             team_id: team.id,
             organization_id: team.organization_id,
             user_id: user_id.clone(),
-            role: format!("{:?}", PRoles::Admin),
             status: TeamMembershipStatus::Active,
-            permissions: None,
+            permissions,
             metadata: None,
             joined_at: time_now(),
             added_by: None,
@@ -182,13 +186,13 @@ pub async fn join_team(
         .bind(("organization_id", org_id.clone()))
         .await?
         .take::<Vec<OrganizationMembership>>(0)?.first().ok_or(Error::InternalServerError)?; // member of org
+    let permissions = only_view_teams_permission();
     let team_data = CreateTeamMembership {
         team_id,
         organization_id: org_id,
         user_id,
-        role: format!("{:?}", PRoles::Viewer),
         status: TeamMembershipStatus::Active,
-        permissions: None,
+        permissions,
         metadata: None,
         joined_at: time_now(),
         added_by: None,
@@ -223,11 +227,13 @@ pub async fn read_team(
         return Err(Error::AccessDenied(Permission::TeamsRead));
     }
 
-    let team = state.sdb
-            .query("SELECT * FROM type::table($table) WHERE organization_id = $organization_id")
-            .bind(("table", TEAM_TABLE))
-            .bind(("organization_id", org_id)).await?
-        .take::<Vec<Team>>(0)?
+    let team = state
+        .sdb
+        .query("SELECT * FROM type::table($table) WHERE organization_id = $organization_id AND deleted_at == None")
+        .bind(("table", TEAM_TABLE))
+        .bind(("organization_id", org_id))
+        .await?
+        .take::<Vec<Team>>(0)?;
 
     Ok((StatusCode::OK, Json(team)))
 }
@@ -236,7 +242,7 @@ pub async fn read_team(
 pub struct UpdateTeamRequest {
     pub name: Option<String>, // ! & (len = 255)
     pub description: Option<String>,
-    pub is_private: Option<bool>,                    // ! (default false)
+    pub is_private: Option<bool>,            // ! (default false)
     pub settings: Option<serde_json::Value>, // ! (default {})
     pub metadata: Option<serde_json::Value>,
 }
@@ -267,8 +273,8 @@ pub async fn update_team(
     State(state): State<AppState>,
     Extension(UserId(user_id)): Extension<UserId>,
     Path((org_id, team_id)): Path<(String, String)>,
-    ValidatedJson(input): ValidatedJson<UpdateTeamRequest>
-)-> Result<(StatusCode, Json<Team>)> {
+    ValidatedJson(input): ValidatedJson<UpdateTeamRequest>,
+) -> Result<(StatusCode, Json<Team>)> {
     // * Rename or reassign team manager.  Change name, privacy, settings.
 
     let org_id = get_record_id_from_string(org_id);
@@ -280,18 +286,25 @@ pub async fn update_team(
         return Err(Error::AccessDenied(Permission::TeamsUpdate));
     }
 
-      let mut team = state.sdb.select::<Option<Team>>(team_id.clone()).await?.ok_or(Error::InternalServerError)?;
+    let mut team = state
+        .sdb
+        .select::<Option<Team>>(team_id.clone())
+        .await?
+        .ok_or(Error::InternalServerError)?;
     if let Some(name) = &input.name {
-    let slug = to_slug(&name);
+        let slug = to_slug(&name);
         if team.slug == slug {
             return Err(Error::TeamNameTaken);
         }
-      }
+    }
     input.apply_to(&mut team);
-    let team = state.sdb.update::<Option<Team>>(team_id)
-        .content(team).
-        await?.ok_or(Error::InternalServerError)?;
-    
+    let team = state
+        .sdb
+        .update::<Option<Team>>(team_id)
+        .content(team)
+        .await?
+        .ok_or(Error::InternalServerError)?;
+
     // TODO: Log team update event
 
     Ok((StatusCode::CREATED, Json(team)))
@@ -300,10 +313,9 @@ pub async fn update_team(
 pub async fn delete_team(
     State(state): State<AppState>,
     Extension(UserId(user_id)): Extension<UserId>,
-    Path((org_id, team_id)): Path<(String, String)>
-)-> Result<(StatusCode, String)> {
+    Path((org_id, team_id)): Path<(String, String)>,
+) -> Result<(StatusCode, String)> {
     // * With care, especially if team is linked to critical data. (soft): Set deleted_at.
-
 
     let org_id = get_record_id_from_string(org_id);
     let team_id = get_record_id_from_string(team_id);
@@ -314,7 +326,7 @@ pub async fn delete_team(
         return Err(Error::AccessDenied(Permission::TeamsDelete));
     }
     let mut memberships = state.sdb
-    .query("SELECT * FROM type::table($table) WHERE team_id = $team_id AND organization_id = $organization_id;")
+    .query("SELECT * FROM type::table($table) WHERE team_id = $team_id AND organization_id = $organization_id AND deleted_at == None;")
     .bind(("table", TEAM_MEMBERSHIP_TABLE))
     .bind(("organization_id", org_id.clone()))
     .bind(("team_id", team_id.clone()))
@@ -322,81 +334,241 @@ pub async fn delete_team(
     for member in memberships.iter_mut() {
         member.deleted_at = Some(time_now());
         member.updated_at = Some(time_now());
-        let _ = state.sdb.update::<Option<TeamMembership>>(member.id.clone())
+        let _ = state
+            .sdb
+            .update::<Option<TeamMembership>>(member.id.clone())
             .content(member.clone())
             .await?;
     }
 
-    let mut team = state.sdb.select::<Option<Team>>(team_id.clone()).await?.ok_or(Error::InternalServerError)?;
+    let mut team = state
+        .sdb
+        .select::<Option<Team>>(team_id.clone())
+        .await?
+        .ok_or(Error::InternalServerError)?;
     team.deleted_at = Some(time_now());
     team.updated_at = Some(time_now());
-    let _ = state.sdb.update::<Option<Team>>(team_id).content(team).await?;
-    
+    let _ = state
+        .sdb
+        .update::<Option<Team>>(team_id)
+        .content(team)
+        .await?;
+
     // TODO:Check for child teams (handle or prevent deletion)
     // TODO:Log team deletion event
-    
-    
+
     Ok((StatusCode::OK, "Team deleted Successfully".to_string()))
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub struct AddTeamMembershipRequest {
+    pub email: String,
+    pub permissions: HashSet<Permission>,
+    pub metadata: Option<serde_json::Value>,
 }
 
 pub async fn add_team_memberships(
     State(state): State<AppState>,
     Extension(UserId(user_id)): Extension<UserId>,
-    Path((org_id, team_id)): Path<(String, String)>
-) -> Result<(StatusCode, Json<TeamMembership>)>{
+    Path((org_id, team_id)): Path<(String, String)>,
+    ValidatedJson(input): ValidatedJson<AddTeamMembershipRequest>,
+) -> Result<(StatusCode, Json<TeamMembership>)> {
+    let _ = input.permissions.validate_team_permissions()?;
 
-    // * When adding a user to a team.  Add user to a team, optionally with added_by.
+    let org_id = get_record_id_from_string(org_id);
+    let team_id = get_record_id_from_string(team_id);
+    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
+        .await?
+        .has_any_permission(&[Permission::TeamsCreate, Permission::TeamsJoin]);
 
-    // TODO:     Authenticate user
-    // TODO: Check user is team admin or has team management permissions
-    // TODO: Validate target user is organization member
-    // TODO: Check if already team member
-    // TODO: Create team membership record
-    // TODO: Log team membership creation event
-    // TODO: Return membership data
-    //
-    todo!()
+    if permission == false {
+        return Err(Error::AccessDenied(Permission::TeamsJoin));
+    }
+    let new_user = state
+        .sdb
+        .query("SELECT * FROM type::table($table) WHERE email = $email AND deleted_at == None;")
+        .bind(("table", USER_TABLE))
+        .bind(("email", input.email))
+        .await?
+        .take::<Vec<User>>(0)?
+        .first()
+        .ok_or(Error::InternalServerError)?
+        .clone();
+
+    let _check_user_org_membership = state
+        .sdb
+        .query("SELECT * FROM type::table($table) WHERE user_id = $user_id AND organization_id = $organization_id AND deleted_at == None;")
+        .bind(("table", ORGANIZATION_MEMBERSHIP_TABLE))
+        .bind(("user_id", new_user.id.clone()))
+        .bind(("organization_id", org_id.clone()))
+        .await?
+        .take::<Vec<TeamMembership>>(0)?
+        .first()
+        .ok_or(Error::InternalServerError)?
+        .clone();
+
+    let mut check_user_org_team_membership = state
+        .sdb
+        .query("SELECT * FROM type::table($table) WHERE user_id = $user_id AND team_id = $team_id AND organization_id = $organization_id AND deleted_at == None;")
+        .bind(("table", TEAM_MEMBERSHIP_TABLE))
+        .bind(("user_id", new_user.id.clone()))
+        .bind(("organization_id", org_id.clone()))
+        .bind(("team_id", team_id.clone()))
+        .await?;
+    if let Some(res) = check_user_org_team_membership
+        .take::<Vec<TeamMembership>>(0)?
+        .first()
+    {
+        return Ok((StatusCode::CREATED, Json(res.clone())));
+    } else {
+        let new_user_data = CreateTeamMembership {
+            added_by: Some(user_id.clone()),
+            created_at: time_now(),
+            deleted_at: None,
+            joined_at: time_now(),
+            metadata: input.metadata,
+            organization_id: org_id,
+            permissions: Some(input.permissions),
+            status: TeamMembershipStatus::Active,
+            team_id: team_id,
+            user_id: new_user.id,
+            updated_at: None,
+        };
+        let res = state
+            .sdb
+            .create::<Option<TeamMembership>>(TEAM_MEMBERSHIP_TABLE)
+            .content(new_user_data)
+            .await?
+            .ok_or(Error::InternalServerError)?;
+
+        // TODO: Log team membership creation event
+
+        return Ok((StatusCode::CREATED, Json(res)));
+    };
 }
 
 pub async fn read_team_memberships(
     State(state): State<AppState>,
     Extension(UserId(user_id)): Extension<UserId>,
-    Path((org_id, team_id)): Path<(String, String)>
-) -> Result<(StatusCode, Json<Vec<TeamMembership>>)>{
-    // * List members per team.
-    //
-    todo!()
+    Path((org_id, team_id)): Path<(String, String)>,
+) -> Result<(StatusCode, Json<Vec<TeamMembership>>)> {
+    let org_id = get_record_id_from_string(org_id);
+    let team_id = get_record_id_from_string(team_id);
+    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
+        .await?
+        .has_permission(&Permission::TeamsRead);
+
+    if permission == false {
+        return Err(Error::AccessDenied(Permission::TeamsRead));
+    }
+
+    let team_membership = state
+        .sdb
+        .query("SELECT * FROM type::table($table) WHERE team_id = $team_id AND organization_id = $organization_id AND deleted_at == None;")
+        .bind(("table", TEAM_MEMBERSHIP_TABLE))
+        .bind(("organization_id", org_id.clone()))
+        .bind(("team_id", team_id.clone()))
+        .await?.take::<Vec<TeamMembership>>(0)?;
+    // ?TODO: pagination
+    return Ok((StatusCode::OK, Json(team_membership)));
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub struct UpdateTeamMembershipRequest {
+    pub status: Option<TeamMembershipStatus>,
+    pub permissions: Option<HashSet<Permission>>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+impl UpdateTeamMembershipRequest {
+    fn apply_to(&self, team: &mut TeamMembership) {
+        if let Some(status) = &self.status {
+            team.status = status.clone();
+        }
+        if let Some(permissions) = &self.permissions {
+            team.permissions = Some(permissions.clone());
+        }
+        if let Some(metadata) = &self.metadata {
+            team.metadata = Some(metadata.clone());
+        }
+    }
 }
 
 pub async fn update_team_memberships(
     State(state): State<AppState>,
     Extension(UserId(user_id)): Extension<UserId>,
-    Path((org_id, team_id, team_member_id)): Path<(String, String, String)>
-)-> Result<(StatusCode, Json<TeamMembership>)> {
+    Path((org_id, team_id, team_member_id)): Path<(String, String, String)>,
+    ValidatedJson(input): ValidatedJson<UpdateTeamMembershipRequest>,
+) -> Result<(StatusCode, Json<TeamMembership>)> {
     // * Promote or demote members. Change role or permissions within team.
 
-    // TODO:     Authenticate user
-    // TODO: Check user is team admin
-    // TODO: Validate new role
-    // TODO: Update team membership record
+    if let Some(permissions) = &input.permissions {
+        let _ = permissions.validate_team_permissions()?;
+    }
+
+    let org_id = get_record_id_from_string(org_id);
+    //let team_id = get_record_id_from_string(team_id);
+    let team_membership_id = get_record_id_from_string(team_member_id);
+    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
+        .await?
+        .has_permission(&Permission::TeamsUpdate);
+
+    if permission == false {
+        return Err(Error::AccessDenied(Permission::TeamsUpdate));
+    }
+
+    let membership = state
+        .sdb
+        .select::<Option<TeamMembership>>(team_membership_id.clone())
+        .await?
+        .ok_or(Error::InternalServerError)?;
+
+    let res = state
+        .sdb
+        .update::<Option<TeamMembership>>(team_membership_id)
+        .content(membership)
+        .await?
+        .ok_or(Error::InternalServerError)?;
+
     // TODO: Log role change event
-    // TODO: Return updated membership data
-    //
-    todo!()
+
+    Ok((StatusCode::OK, Json(res)))
 }
 
 pub async fn remove_team_memberships(
     State(state): State<AppState>,
     Extension(UserId(user_id)): Extension<UserId>,
-    Path((org_id, team_id, team_member_id)): Path<(String, String, String)>
-)-> Result<(StatusCode, String)> {
+    Path((org_id, team_id, team_member_id)): Path<(String, String, String)>,
+) -> Result<(StatusCode, String)> {
     // * When someone leaves a team. Remove user from a team.
 
-    // TODO:     Authenticate user
-    // TODO: Check user is team admin or removing themselves
-    // TODO: Delete team membership record
-    // TODO: Log member removal event
-    // TODO: Return success confirmation
+    let org_id = get_record_id_from_string(org_id);
+    //let team_id = get_record_id_from_string(team_id);
+    let team_membership_id = get_record_id_from_string(team_member_id);
+    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
+        .await?
+        .has_permission(&Permission::TeamsUpdate);
 
-    todo!()
+    if permission == false {
+        return Err(Error::AccessDenied(Permission::TeamsUpdate));
+    }
+
+    // ? Check user is team admin or removing themselves
+    let mut membership = state
+        .sdb
+        .select::<Option<TeamMembership>>(team_membership_id.clone())
+        .await?
+        .ok_or(Error::InternalServerError)?;
+    membership.deleted_at = Some(time_now());
+
+    let _ = state
+        .sdb
+        .update::<Option<TeamMembership>>(team_membership_id)
+        .content(membership)
+        .await?
+        .ok_or(Error::InternalServerError)?;
+
+    // TODO: Log member removal event
+
+    Ok((StatusCode::OK, "Delete membership confirmed".to_string()))
 }

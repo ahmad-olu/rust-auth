@@ -63,7 +63,7 @@ pub struct TeamMembership {
     pub team_id: RecordId,
     pub organization_id: RecordId,
     pub user_id: RecordId,
-    pub role: String, // ! (default member) & (less than 50)
+    //pub role: String, // ! (default member) & (less than 50)
     pub status: TeamMembershipStatus,
 
     // ? Permissions
@@ -83,7 +83,7 @@ pub struct CreateTeamMembership {
     pub team_id: RecordId,
     pub organization_id: RecordId,
     pub user_id: RecordId,
-    pub role: String, // ! (default member) & (less than 50)
+    //pub role: String, // ! (default member) & (less than 50)
     pub status: TeamMembershipStatus,
 
     // ? Permissions

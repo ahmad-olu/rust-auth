@@ -150,7 +150,7 @@ pub async fn read_organization(
             .ok_or(Error::InternalServerError)?
             .clone();
 
-        let permission = create_context(&state.sdb, user_id.clone(), org.id.clone())
+        let permission = create_context(&state.sdb, user_id.clone(), org.id.clone(), None)
             .await?
             .has_permission(&Permission::OrgRead);
 
@@ -170,7 +170,7 @@ pub async fn read_organization(
             .first()
             .ok_or(Error::InternalServerError)?
             .clone();
-        let permission = create_context(&state.sdb, user_id.clone(), org.id.clone())
+        let permission = create_context(&state.sdb, user_id.clone(), org.id.clone(), None)
             .await?
             .has_permission(&Permission::OrgRead);
         if permission == false {
@@ -267,7 +267,7 @@ pub async fn update_organization(
     ValidatedJson(input): ValidatedJson<UpdateOrganization>,
 ) -> Result<(StatusCode, Json<Organization>)> {
     let org_id = get_record_id_from_string(org_id);
-    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
+    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone(), None)
         .await?
         .has_permission(&Permission::OrgUpdate);
     if permission == false {
@@ -322,7 +322,7 @@ pub async fn delete_organization(
     Path(org_id): Path<String>,
 ) -> Result<(StatusCode, String)> {
     let org_id = get_record_id_from_string(org_id);
-    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
+    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone(), None)
         .await?
         .has_permission(&Permission::OrgDelete);
     if permission == false {
@@ -463,7 +463,7 @@ pub async fn create_organization_memberships(
     ValidatedJson(input): ValidatedJson<CreateOrganizationMembership2>,
 ) -> Result<(StatusCode, Json<OrganizationMembership>)> {
     let org_id = get_record_id_from_string(org_id);
-    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
+    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone(), None)
         .await?
         .has_permission(&Permission::MembersInvite);
     if permission == false {
@@ -527,7 +527,7 @@ pub async fn read_organization_memberships(
     // let per_page = 10;
     // let start = (page - 1) * per_page;
     let org_id = get_record_id_from_string(org_id);
-    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
+    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone(), None)
         .await?
         .has_permission(&Permission::MembersRead);
     if permission == false {
@@ -580,7 +580,7 @@ pub async fn update_organization_memberships(
 ) -> Result<(StatusCode, Json<OrganizationMembership>)> {
     let org_id = get_record_id_from_string(org_id);
     let member_id = get_record_id_from_string(member_id);
-    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
+    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone(), None)
         .await?
         .has_permission(&Permission::MembersUpdate);
     if permission == false {
@@ -648,7 +648,7 @@ pub async fn delete_organization_memberships(
 ) -> Result<(StatusCode, String)> {
     let org_id = get_record_id_from_string(org_id);
     let member_id = get_record_id_from_string(member_id);
-    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
+    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone(), None)
         .await?
         .has_permission(&Permission::MembersRemove);
     if permission == false {

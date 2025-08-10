@@ -90,7 +90,6 @@ pub struct PermissionContext {
     pub organization: Organization,
     pub organization_membership: OrganizationMembership,
     pub organization_role: Roles,
-    pub team_memberships: Vec<(Team, TeamMembership, Roles)>,
     pub effective_permissions: HashSet<Permission>,
 }
 
@@ -98,18 +97,8 @@ pub trait PermissionChecker {
     fn has_permission(&self, permission: &Permission) -> bool;
     fn has_any_permission(&self, permissions: &[Permission]) -> bool;
     fn can_access_organization(&self, org_id: &RecordId) -> bool;
-    fn can_access_team(&self, team_id: &RecordId) -> bool;
     fn is_organization_owner(&self) -> bool;
-    fn is_team_admin(&self, team_id: &RecordId) -> bool;
-
     fn check_permission(&self, permission: &Permission) -> Result<()>;
-    fn validate_resource_access(
-        &self,
-
-        resource_type: &str,
-        resource_id: &RecordId,
-        action: &Permission,
-    ) -> Result<()>;
 }
 
 impl PermissionChecker for PermissionContext {
@@ -132,24 +121,8 @@ impl PermissionChecker for PermissionContext {
             && self.organization_membership.status == OrganizationMembershipStatus::Active
     }
 
-    fn can_access_team(&self, team_id: &RecordId) -> bool {
-        self.team_memberships
-            .iter()
-            .any(|(team, membership, _)| &team.id == team_id && membership.user_id == self.user.id)
-    }
-
     fn is_organization_owner(&self) -> bool {
         self.organization_role.key == "owner"
-    }
-
-    fn is_team_admin(&self, team_id: &RecordId) -> bool {
-        self.team_memberships
-            .iter()
-            .any(|(team, membership, role)| {
-                &team.id == team_id
-                    && membership.user_id == self.user.id
-                    && (role.key == "admin" || role.key == "owner")
-            })
     }
 
     fn check_permission(&self, permission: &Permission) -> Result<()> {
@@ -158,31 +131,5 @@ impl PermissionChecker for PermissionContext {
         } else {
             Err(Error::AccessDenied(permission.clone()))
         }
-    }
-
-    fn validate_resource_access(
-        &self,
-
-        resource_type: &str,
-        resource_id: &RecordId,
-        action: &Permission,
-    ) -> Result<()> {
-        self.check_permission(action)?;
-
-        match resource_type {
-            "team" => {
-                if !self.can_access_team(resource_id) {
-                    return Err(Error::AccessDenied(action.clone()));
-                }
-            }
-            "organization" => {
-                if !self.can_access_organization(resource_id) {
-                    return Err(Error::AccessDenied(action.clone()));
-                }
-            }
-            _ => {}
-        }
-
-        Ok(())
     }
 }

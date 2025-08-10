@@ -51,7 +51,7 @@ pub async fn create_team(
 ) -> Result<(StatusCode, Json<Team>)> {
     // * Must belong to an organization. (Any member with permission (e.g., team:create) can create a team.)
     let org_id = get_record_id_from_string(org_id);
-    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
+    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone(), None)
         .await?
         .has_permission(&Permission::TeamsCreate);
     if permission == false {
@@ -220,7 +220,7 @@ pub async fn read_team(
     // * List teams in an organization.(List teams within org or nested teams via parent_team_id.)
 
     let org_id = get_record_id_from_string(org_id);
-    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
+    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone(), None)
         .await?
         .has_permission(&Permission::TeamsRead);
     if permission == false {
@@ -279,9 +279,14 @@ pub async fn update_team(
 
     let org_id = get_record_id_from_string(org_id);
     let team_id = get_record_id_from_string(team_id);
-    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
-        .await?
-        .has_permission(&Permission::TeamsUpdate);
+    let permission = create_context(
+        &state.sdb,
+        user_id.clone(),
+        org_id.clone(),
+        Some(team_id.clone()),
+    )
+    .await?
+    .has_permission(&Permission::TeamsUpdate);
     if permission == false {
         return Err(Error::AccessDenied(Permission::TeamsUpdate));
     }
@@ -319,9 +324,14 @@ pub async fn delete_team(
 
     let org_id = get_record_id_from_string(org_id);
     let team_id = get_record_id_from_string(team_id);
-    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
-        .await?
-        .has_permission(&Permission::TeamsDelete);
+    let permission = create_context(
+        &state.sdb,
+        user_id.clone(),
+        org_id.clone(),
+        Some(team_id.clone()),
+    )
+    .await?
+    .has_permission(&Permission::TeamsDelete);
     if permission == false {
         return Err(Error::AccessDenied(Permission::TeamsDelete));
     }
@@ -377,9 +387,14 @@ pub async fn add_team_memberships(
 
     let org_id = get_record_id_from_string(org_id);
     let team_id = get_record_id_from_string(team_id);
-    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
-        .await?
-        .has_any_permission(&[Permission::TeamsCreate, Permission::TeamsJoin]);
+    let permission = create_context(
+        &state.sdb,
+        user_id.clone(),
+        org_id.clone(),
+        Some(team_id.clone()),
+    )
+    .await?
+    .has_any_permission(&[Permission::TeamsCreate, Permission::TeamsJoin]);
 
     if permission == false {
         return Err(Error::AccessDenied(Permission::TeamsJoin));
@@ -454,9 +469,14 @@ pub async fn read_team_memberships(
 ) -> Result<(StatusCode, Json<Vec<TeamMembership>>)> {
     let org_id = get_record_id_from_string(org_id);
     let team_id = get_record_id_from_string(team_id);
-    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
-        .await?
-        .has_permission(&Permission::TeamsRead);
+    let permission = create_context(
+        &state.sdb,
+        user_id.clone(),
+        org_id.clone(),
+        Some(team_id.clone()),
+    )
+    .await?
+    .has_permission(&Permission::TeamsRead);
 
     if permission == false {
         return Err(Error::AccessDenied(Permission::TeamsRead));
@@ -507,11 +527,16 @@ pub async fn update_team_memberships(
     }
 
     let org_id = get_record_id_from_string(org_id);
-    //let team_id = get_record_id_from_string(team_id);
+    let team_id = get_record_id_from_string(team_id);
     let team_membership_id = get_record_id_from_string(team_member_id);
-    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
-        .await?
-        .has_permission(&Permission::TeamsUpdate);
+    let permission = create_context(
+        &state.sdb,
+        user_id.clone(),
+        org_id.clone(),
+        Some(team_id.clone()),
+    )
+    .await?
+    .has_permission(&Permission::TeamsUpdate);
 
     if permission == false {
         return Err(Error::AccessDenied(Permission::TeamsUpdate));
@@ -543,11 +568,16 @@ pub async fn remove_team_memberships(
     // * When someone leaves a team. Remove user from a team.
 
     let org_id = get_record_id_from_string(org_id);
-    //let team_id = get_record_id_from_string(team_id);
+    let team_id = get_record_id_from_string(team_id);
     let team_membership_id = get_record_id_from_string(team_member_id);
-    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone())
-        .await?
-        .has_permission(&Permission::TeamsUpdate);
+    let permission = create_context(
+        &state.sdb,
+        user_id.clone(),
+        org_id.clone(),
+        Some(team_id.clone()),
+    )
+    .await?
+    .has_permission(&Permission::TeamsUpdate);
 
     if permission == false {
         return Err(Error::AccessDenied(Permission::TeamsUpdate));

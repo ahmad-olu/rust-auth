@@ -485,10 +485,7 @@ mod modify_user_tests {
             AUTH_PASSWORD_TABLE, EMAIL_CHANGE_TOKEN_TABLE, EMAIL_VERIFICATION_TABLE,
             PASSWORD_RESET_TOKEN_TABLE, USER_TABLE,
         },
-        models::{
-            user::User,
-            verification::{EmailChangeToken, EmailVerification},
-        },
+        models::verification::EmailChangeToken,
         routes::auth_route::user::SignInFormResponse,
         state::AppState,
     };
@@ -498,13 +495,8 @@ mod modify_user_tests {
     const DELETE_IN_URI: &str = "/auth/user";
     const RESEND_EMAIL_VERIFICATION_URI: &str = "/auth/email/resend-verification";
     const REQUEST_EMAIL_CHANGE_URI: &str = "/auth/email/change-request";
-    const PASSWORD_RESET_URI: &str = "/auth/password/reset";
 
-    static EMAIL_VERIFY_URI: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
     static EMAIL_CHANGE_CONFIRM_URI: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
-    static PASSWORD_REQUEST_URI: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None)); // * password/reset-request
-    static PASSWORD_REQUEST_VALIDATE_URI: Lazy<Mutex<Option<String>>> =
-        Lazy::new(|| Mutex::new(None)); // * password/validate-token
 
     const FORM_DATA_SIGNUP: &str =
         "email=alana5%40gmail.com&username=allana3&password=Allana%24n09878";
@@ -515,13 +507,12 @@ mod modify_user_tests {
     #[tokio::test]
     async fn test_full_auth_flow() {
         clear_data().await;
-        //test_sign_up().await;
-        //test_sign_in().await;
-        //test_resend_email_verification().await;
-        // test_email_verify().await;
-        // test_request_email_change().await;
-        // test_confirm_email_change().await;
-        //test_delete_user().await;
+        test_sign_up().await;
+        test_sign_in().await;
+        test_resend_email_verification().await;
+
+        test_request_email_change().await;
+        test_delete_user().await;
     }
 
     async fn test_sign_up() {

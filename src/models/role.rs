@@ -58,6 +58,26 @@ pub struct CreateRoles {
     pub metadata: Option<serde_json::Value>,
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct RequestCreateRoles {
+    pub name: String, // ! & (len = 100)
+    pub description: Option<String>,
+    pub permissions: HashSet<Permission>, // !  (default []),
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct RequestUpdateRoles {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>, // ! & (len = 100)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permissions: Option<HashSet<Permission>>, // !  (default []),
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
 pub async fn inti_roles(sdb: &Surreal<Client>, organization_id: RecordId) -> Result<()> {
     let default_roles = vec![
         CreateRoles {

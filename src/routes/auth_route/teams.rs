@@ -15,10 +15,9 @@ use crate::{
     models::{
         organization::OrganizationMembership,
         permission::{
-            self, Permission, PermissionChecker, TeamPermissionValidator, all_teams_permission,
+            Permission, PermissionChecker, TeamPermissionValidator, all_teams_permission,
             only_view_teams_permission,
         },
-        role::PRoles,
         team::{CreateTeam, CreateTeamMembership, Team, TeamMembership, TeamMembershipStatus},
         user::User,
     },
@@ -417,7 +416,7 @@ pub async fn add_team_memberships(
         .bind(("user_id", new_user.id.clone()))
         .bind(("organization_id", org_id.clone()))
         .await?
-        .take::<Vec<TeamMembership>>(0)?
+        .take::<Vec<OrganizationMembership>>(0)?
         .first()
         .ok_or(Error::InternalServerError)?
         .clone();
@@ -542,12 +541,13 @@ pub async fn update_team_memberships(
         return Err(Error::AccessDenied(Permission::TeamsUpdate));
     }
 
-    let membership = state
+    let mut membership = state
         .sdb
         .select::<Option<TeamMembership>>(team_membership_id.clone())
         .await?
         .ok_or(Error::InternalServerError)?;
 
+    input.apply_to(&mut membership);
     let res = state
         .sdb
         .update::<Option<TeamMembership>>(team_membership_id)

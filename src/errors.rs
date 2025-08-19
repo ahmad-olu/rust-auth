@@ -95,6 +95,9 @@ pub enum Error {
     Custom(String),
     #[error("Team name taken")]
     TeamNameTaken,
+
+    #[error("role exist")]
+    RoleAlreadyExist,
 }
 
 impl IntoResponse for Error {
@@ -215,6 +218,9 @@ impl IntoResponse for Error {
                 StatusCode::CONFLICT,
                 "Team name UnAvailable, try another.".to_string(),
             ),
+            Error::RoleAlreadyExist => {
+                (StatusCode::CONFLICT, "Role exist, try another.".to_string())
+            }
         };
         (status, message).into_response()
     }

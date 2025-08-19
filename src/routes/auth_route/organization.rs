@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use axum::{
     Extension, Json,
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::StatusCode,
 };
 use regex::Regex;
@@ -783,8 +783,8 @@ pub async fn leave_organization(
 // ! --- extras
 
 pub async fn organization_switch(
-    State(state): State<AppState>,
-    Extension(UserId(user_id)): Extension<UserId>,
+    State(_state): State<AppState>,
+    Extension(UserId(_user_id)): Extension<UserId>,
 ) -> Result<(StatusCode, String)> {
     // TODO:      Authenticate user session
     // TODO:  Validate user has membership in target organization
@@ -795,8 +795,8 @@ pub async fn organization_switch(
 }
 
 pub async fn bulk_member_import(
-    State(state): State<AppState>,
-    Extension(UserId(user_id)): Extension<UserId>,
+    State(_state): State<AppState>,
+    Extension(UserId(_user_id)): Extension<UserId>,
 ) -> Result<(StatusCode, String)> {
     //TODO:      Authenticate user
     //TODO:  Check bulk import permissions
@@ -811,8 +811,8 @@ pub async fn bulk_member_import(
 }
 
 pub async fn data_export(
-    State(state): State<AppState>,
-    Extension(UserId(user_id)): Extension<UserId>,
+    State(_state): State<AppState>,
+    Extension(UserId(_user_id)): Extension<UserId>,
 ) -> Result<(StatusCode, String)> {
     //TODO:      Authenticate user as organization owner
     //TODO:  Generate comprehensive data export
@@ -825,8 +825,8 @@ pub async fn data_export(
 }
 
 pub async fn organization_migration(
-    State(state): State<AppState>,
-    Extension(UserId(user_id)): Extension<UserId>,
+    State(_state): State<AppState>,
+    Extension(UserId(_user_id)): Extension<UserId>,
 ) -> Result<(StatusCode, String)> {
     //TODO:      Authenticate as system admin
     //TODO:  Create backup of source organization

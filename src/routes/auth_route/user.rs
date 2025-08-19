@@ -1,5 +1,5 @@
 use axum::{Json, extract::State, http::StatusCode};
-use chrono::{DateTime, Duration, FixedOffset, Local, Utc};
+use chrono::{Duration, Utc};
 use validator::Validate;
 
 use crate::{
@@ -196,7 +196,6 @@ mod user_tests {
     };
     use http_body_util::BodyExt;
     use once_cell::sync::Lazy;
-    use serde_json::json;
     use tower::ServiceExt; // for `collect`
 
     use crate::{
@@ -213,7 +212,7 @@ mod user_tests {
     // static mut TOKEN: Option<String> = None;
     static TOKEN: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
 
-    // #[tokio::test]
+    #[tokio::test]
     async fn test_full_auth_flow() {
         clear_data().await;
         test_sign_up().await;

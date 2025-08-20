@@ -74,10 +74,27 @@ pub async fn create_role(
 }
 
 pub async fn read_role(
-    State(_state): State<AppState>,
-    Extension(UserId(_user_id)): Extension<UserId>,
-) {
-    // * List all available roles for an organization.
+    State(state): State<AppState>,
+    Path(org_id): Path<String>,
+    Extension(UserId(user_id)): Extension<UserId>,
+) -> Result<(StatusCode, Json<Vec<Roles>>)> {
+    let org_id = get_record_id_from_string(org_id);
+    let permission = create_context(&state.sdb, user_id.clone(), org_id.clone(), None)
+        .await?
+        .has_permission(&Permission::RolesRead);
+    if permission == false {
+        return Err(Error::AccessDenied(Permission::RolesRead));
+    }
+
+    let  roles = state
+        .sdb
+        .query("SELECT * FROM type::table($table) WHERE organization_id = $organization_id AND deleted_at == None;")
+        .bind(("table", ORGANIZATION_MEMBERSHIP_TABLE))
+        .bind(("organization_id", org_id.clone()))
+        .await?
+        .take::<Vec<Roles>>(0)?;
+
+    Ok((StatusCode::OK, Json(roles)))
 }
 
 pub async fn update_role(

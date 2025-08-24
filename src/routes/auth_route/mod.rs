@@ -1,7 +1,5 @@
 use std::{sync::Arc, time::Duration};
-use tower_governor::{
-    GovernorLayer, governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor,
-};
+use tower_governor::{governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor};
 
 use axum::{
     Router, middleware,
@@ -10,23 +8,20 @@ use axum::{
 
 use crate::{
     middleware::auth_jwt_middleware,
-    routes::{
-        auth_route::{
-            modify_user::{
-                confirm_email_change, delete_user, forgotten_password_token_validation,
-                request_email_change, request_forgot_password, resend_email_verification,
-                reset_password, verify_email,
-            },
-            organization::{
-                bulk_member_import, create_organization, create_organization_memberships,
-                data_export, delete_organization, delete_organization_memberships,
-                leave_organization, organization_migration, organization_switch, read_organization,
-                read_organization_memberships, read_organizations, update_organization,
-                update_organization_memberships,
-            },
-            user::{sign_in, sign_up},
+    routes::auth_route::{
+        modify_user::{
+            confirm_email_change, delete_user, forgotten_password_token_validation,
+            request_email_change, request_forgot_password, resend_email_verification,
+            reset_password, verify_email,
         },
-        root_route,
+        organization::{
+            bulk_member_import, create_organization, create_organization_memberships, data_export,
+            delete_organization, delete_organization_memberships, leave_organization,
+            organization_migration, organization_switch, read_organization,
+            read_organization_memberships, read_organizations, update_organization,
+            update_organization_memberships,
+        },
+        user::{sign_in, sign_up},
     },
     state::AppState,
 };
